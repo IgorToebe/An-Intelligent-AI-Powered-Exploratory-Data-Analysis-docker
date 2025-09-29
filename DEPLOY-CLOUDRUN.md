@@ -53,11 +53,13 @@ echo "sua-google-api-key-aqui" > api-key.txt
 ### 4. Deploy Automático
 
 **Windows:**
+
 ```cmd
 deploy-cloudrun.bat
 ```
 
 **Linux/Mac:**
+
 ```bash
 chmod +x deploy-cloudrun.sh
 ./deploy-cloudrun.sh
@@ -66,6 +68,7 @@ chmod +x deploy-cloudrun.sh
 ### 5. Configurar Google Cloud Storage (para arquivos grandes)
 
 **Automático:**
+
 ```bash
 # Windows
 setup-gcs.bat your-project-id
@@ -76,6 +79,7 @@ chmod +x setup-gcs.sh
 ```
 
 **Manual:**
+
 ```bash
 # Criar bucket
 gsutil mb -p your-project-id -l us-central1 gs://i2a2-eda-uploads
@@ -119,6 +123,7 @@ gcloud run services update i2a2-eda-platform \
 ## 🔧 Configurações do Cloud Run
 
 ### Recursos Alocados:
+
 - **CPU**: 1 vCPU
 - **Memória**: 2 GB
 - **Timeout**: 5 minutos
@@ -126,6 +131,7 @@ gcloud run services update i2a2-eda-platform \
 - **Instâncias**: 0-10 (auto-scaling)
 
 ### Estimativa de Custos:
+
 - **Requests**: $0.40 por 1M requests
 - **CPU**: $0.00002400 por vCPU-segundo
 - **Memória**: $0.00000250 por GB-segundo
@@ -134,6 +140,7 @@ gcloud run services update i2a2-eda-platform \
 ## 🌐 Acesso à Aplicação
 
 Após o deploy, você receberá uma URL similar a:
+
 ```
 https://i2a2-eda-platform-[hash]-uc.a.run.app
 ```
@@ -141,6 +148,7 @@ https://i2a2-eda-platform-[hash]-uc.a.run.app
 ## 🔒 Segurança
 
 ### Configurar Domínio Personalizado (Opcional):
+
 ```bash
 gcloud run domain-mappings create \
     --service i2a2-eda-platform \
@@ -149,6 +157,7 @@ gcloud run domain-mappings create \
 ```
 
 ### Configurar Autenticação (Opcional):
+
 ```bash
 gcloud run services remove-iam-policy-binding i2a2-eda-platform \
     --member="allUsers" \
@@ -159,11 +168,13 @@ gcloud run services remove-iam-policy-binding i2a2-eda-platform \
 ## 📊 Monitoramento
 
 ### Visualizar Logs:
+
 ```bash
 gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=i2a2-eda-platform" --limit 50 --format json
 ```
 
 ### Métricas no Console:
+
 - Acesse: https://console.cloud.google.com/run
 - Selecione seu serviço
 - Vá na aba "Métricas"
@@ -173,18 +184,21 @@ gcloud logging read "resource.type=cloud_run_revision AND resource.labels.servic
 ### Problemas Comuns:
 
 1. **Erro de autenticação**:
+
    ```bash
    gcloud auth login
    gcloud auth configure-docker
    ```
 
 2. **Quota excedida**:
+
    ```bash
    gcloud compute regions list
    # Escolha região com menos uso
    ```
 
 3. **Timeout no deploy**:
+
    ```bash
    # Aumentar timeout
    gcloud run services update i2a2-eda-platform --timeout=600s
@@ -214,6 +228,7 @@ gcloud run deploy i2a2-eda-platform \
 ## 📞 Suporte
 
 Para mais informações:
+
 - [Documentação Cloud Run](https://cloud.google.com/run/docs)
 - [Preços Cloud Run](https://cloud.google.com/run/pricing)
 - [Limites e Quotas](https://cloud.google.com/run/quotas)

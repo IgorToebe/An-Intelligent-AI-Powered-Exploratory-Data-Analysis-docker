@@ -3,27 +3,32 @@
 ## ✅ Arquivos Criados
 
 ### 📦 Docker:
+
 - `Dockerfile` - Configuração da imagem Docker
 - `.dockerignore` - Arquivos a ignorar no build
 - `docker-compose.yml` - Para desenvolvimento local
 
 ### ☁️ Google Cloud Run:
+
 - `cloudrun-service.yaml` - Configuração do serviço
 - `deploy-cloudrun.sh` - Script de deploy (Linux/Mac)
 - `deploy-cloudrun.bat` - Script de deploy (Windows)
 - `DEPLOY-CLOUDRUN.md` - Documentação completa
 
 ### 🧪 Testes:
+
 - `test-docker.sh` - Teste local (Linux/Mac)
 - `test-docker.bat` - Teste local (Windows)
 
 ### 🔐 Configuração:
+
 - `api-key.txt.example` - Exemplo de configuração da API
 - `.gitignore` - Arquivos a ignorar no Git
 
 ## 🚀 Quick Start
 
 ### 1. Preparar API Key:
+
 ```bash
 # Copie o arquivo exemplo
 cp api-key.txt.example api-key.txt
@@ -34,6 +39,7 @@ nano api-key.txt     # Linux/Mac
 ```
 
 ### 2. Teste Local:
+
 ```bash
 # Windows
 test-docker.bat
@@ -44,6 +50,7 @@ chmod +x test-docker.sh
 ```
 
 ### 3. Deploy no Cloud Run:
+
 ```bash
 # Edite primeiro os scripts com seu PROJECT_ID
 # Windows
@@ -80,6 +87,7 @@ chmod +x deploy-cloudrun.sh
 ## 🆘 Troubleshooting
 
 ### Docker build falha:
+
 ```bash
 # Limpar cache
 docker system prune -f
@@ -87,12 +95,14 @@ docker build --no-cache -t i2a2-eda-platform .
 ```
 
 ### Cloud Run timeout:
+
 ```bash
 # Aumentar timeout
 gcloud run services update i2a2-eda-platform --timeout=600s
 ```
 
 ### Erro de memória:
+
 ```bash
 # Aumentar memória
 gcloud run services update i2a2-eda-platform --memory=4Gi

@@ -819,8 +819,17 @@ def carregar_arquivo():
     </div>
     """, unsafe_allow_html=True)
     
-    # Configurar ambiente GCS
-    setup_gcs_environment()
+    # Configurar ambiente GCS e verificar se está funcionando
+    gcs_configured = setup_gcs_environment()
+    
+    if not gcs_configured:
+        st.error("🚨 Google Cloud Storage não está configurado!")
+        st.info("📋 Configure as seguintes variáveis de ambiente:")
+        st.code("""
+GOOGLE_CLOUD_PROJECT=groovy-rope-471520-c9
+GCS_BUCKET_NAME=i2a2-eda-uploads
+        """)
+        st.stop()
     
     # Widget de upload otimizado para arquivos grandes
     df, blob_name = create_streamlit_file_uploader_with_gcs()

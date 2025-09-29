@@ -233,7 +233,7 @@ class GCSManager:
 
 def upload_large_file_to_gcs(file_data: bytes, filename: str, gcs_manager: GCSManager) -> Optional[str]:
     """
-    Upload de arquivo grande usando signed URL.
+    Upload de arquivo grande usando signed URL com streaming.
     
     Args:
         file_data: Dados do arquivo em bytes
@@ -244,27 +244,52 @@ def upload_large_file_to_gcs(file_data: bytes, filename: str, gcs_manager: GCSMa
         Nome do blob no GCS ou None se erro
     """
     try:
+        # Verificar tamanho
+        file_size_mb = len(file_data) / (1024 * 1024)
+        logger.info(f"Iniciando upload de {filename} ({file_size_mb:.1f} MB)")
+        
         # Gerar signed URL
         upload_info = gcs_manager.generate_signed_upload_url(filename)
         if not upload_info:
-            st.error("Erro ao gerar URL de upload")
+            st.error("❌ Erro ao gerar URL de upload")
             return None
         
-        # Fazer upload usando a signed URL
+        # Fazer upload usando streaming para arquivos grandes
         headers = upload_info['upload_headers']
         
-        response = requests.put(
-            upload_info['signed_url'],
-            data=file_data,
-            headers=headers,
-            timeout=300  # 5 minutos
-        )
+        # Usar streaming para arquivos > 10MB
+        if file_size_mb > 10:
+            import io
+            file_stream = io.BytesIO(file_data)
+            
+            response = requests.put(
+                upload_info['signed_url'],
+                data=file_stream,
+                headers=headers,
+                timeout=600,  # 10 minutos para arquivos grandes
+                stream=True
+            )
+        else:
+            response = requests.put(
+                upload_info['signed_url'],
+                data=file_data,
+                headers=headers,
+                timeout=300  # 5 minutos
+            )
+        
+        logger.info(f"Upload response: {response.status_code}")
         
         if response.status_code == 200:
             st.success(f"✅ Arquivo {filename} enviado com sucesso!")
+            logger.info(f"Upload successful: {upload_info['blob_name']}")
             return upload_info['blob_name']
+        elif response.status_code == 413:
+            st.error("❌ Arquivo muito grande. Verifique configuração do servidor.")
+            logger.error(f"Erro 413 - Payload too large para {filename}")
+            return None
         else:
             st.error(f"❌ Erro no upload: {response.status_code} - {response.text}")
+            logger.error(f"Upload error: {response.status_code} - {response.text}")
             return None
             
     except Exception as e:
@@ -286,75 +311,60 @@ def create_streamlit_file_uploader_with_gcs():
     # Interface do usuário
     st.subheader("📂 Upload de Arquivo CSV")
     
-    # Verificar disponibilidade do GCS
+    # Sempre usar GCS para evitar limitações do Streamlit
     if not gcs_manager.is_available():
-        st.warning("⚠️ Google Cloud Storage não configurado. Usando upload tradicional (limite 32MB)")
-        
-        # Fallback para upload tradicional
-        uploaded_file = st.file_uploader(
-            "Escolha um arquivo CSV",
-            type=['csv'],
-            help="Upload tradicional - limitado a 32MB"
-        )
-        
-        if uploaded_file:
-            try:
-                df = pd.read_csv(uploaded_file)
-                return df, None
-            except Exception as e:
-                st.error(f"Erro ao processar arquivo: {e}")
-                return None, None
-        
+        st.error("❌ Google Cloud Storage é obrigatório para esta aplicação")
+        st.info("📋 Configure as variáveis de ambiente:")
+        st.code("""
+GOOGLE_CLOUD_PROJECT=groovy-rope-471520-c9
+GCS_BUCKET_NAME=i2a2-eda-uploads
+""")
         return None, None
     
-    # Upload com GCS (arquivos grandes)
-    st.info("🚀 Upload otimizado para arquivos grandes (até 200MB) via Google Cloud Storage")
+    # Upload SEMPRE via GCS para evitar erro 413
+    st.success("🚀 Upload via Google Cloud Storage (sem limitação de tamanho)")
     
+    # Interface customizada para upload via GCS
+    st.markdown("### 📂 Selecione seu arquivo CSV")
+    
+    # Input para nome do arquivo (simulando file picker)
     uploaded_file = st.file_uploader(
-        "Escolha um arquivo CSV",
+        "Arquivo CSV (processado via Google Cloud Storage)",
         type=['csv'],
-        help="Suporte a arquivos grandes até 200MB"
+        help="Todos os arquivos são processados via GCS - sem limite de 32MB",
+        key="gcs_uploader"
     )
     
     if uploaded_file:
         file_size_mb = len(uploaded_file.getvalue()) / (1024 * 1024)
         
         st.info(f"📊 Arquivo: {uploaded_file.name} ({file_size_mb:.1f} MB)")
+        st.info("☁️ Processando via Google Cloud Storage (sem limitações)...")
         
-        # Decidir estratégia baseada no tamanho
-        if file_size_mb <= 30:  # Usar upload tradicional para arquivos pequenos
-            st.info("📁 Processando arquivo pequeno diretamente...")
-            try:
-                df = pd.read_csv(uploaded_file)
-                return df, None
-            except Exception as e:
-                st.error(f"Erro ao processar arquivo: {e}")
+        # SEMPRE usar GCS, independente do tamanho
+        with st.spinner("Enviando arquivo para GCS..."):
+            blob_name = upload_large_file_to_gcs(
+                uploaded_file.getvalue(),
+                uploaded_file.name,
+                gcs_manager
+            )
+        
+        if blob_name:
+            st.success("✅ Upload concluído! Carregando dados...")
+            
+            with st.spinner("Baixando e processando dados..."):
+                df = gcs_manager.download_file_as_dataframe(blob_name)
+            
+            if df is not None:
+                # Limpar arquivo após carregar
+                gcs_manager.delete_file(blob_name)
+                st.success(f"🎉 Dados carregados: {len(df):,} linhas × {len(df.columns)} colunas")
+                return df, blob_name
+            else:
+                st.error("❌ Erro ao processar dados do arquivo")
                 return None, None
-        
-        else:  # Usar GCS para arquivos grandes
-            st.info("☁️ Enviando arquivo grande via Google Cloud Storage...")
-            
-            with st.spinner("Enviando arquivo..."):
-                blob_name = upload_large_file_to_gcs(
-                    uploaded_file.getvalue(),
-                    uploaded_file.name,
-                    gcs_manager
-                )
-            
-            if blob_name:
-                st.info("📥 Baixando dados para análise...")
-                
-                with st.spinner("Carregando dados..."):
-                    df = gcs_manager.download_file_as_dataframe(blob_name)
-                
-                if df is not None:
-                    # Limpar arquivo após carregar
-                    gcs_manager.delete_file(blob_name)
-                    return df, blob_name
-                else:
-                    st.error("Erro ao carregar dados do arquivo")
-                    return None, None
-            
+        else:
+            st.error("❌ Falha no upload para GCS")
             return None, None
     
     return None, None
@@ -362,20 +372,65 @@ def create_streamlit_file_uploader_with_gcs():
 
 # Configurações de ambiente para GCS
 def setup_gcs_environment():
-    """Configura variáveis de ambiente necessárias para GCS."""
+    """Configura e verifica variáveis de ambiente necessárias para GCS."""
+    
+    # Verificar variáveis de ambiente obrigatórias
+    project_id = os.getenv('GOOGLE_CLOUD_PROJECT')
+    bucket_name = os.getenv('GCS_BUCKET_NAME', 'i2a2-eda-uploads')
+    
+    # Tentar obter do secrets.toml se não estiver nas env vars
+    if not project_id:
+        try:
+            project_id = st.secrets.get("GOOGLE_CLOUD_PROJECT")
+            bucket_name = st.secrets.get("GCS_BUCKET_NAME", "i2a2-eda-uploads")
+            
+            if project_id:
+                st.info(f"📋 Usando configuração do secrets.toml: {project_id}")
+            
+        except Exception:
+            pass
+    
     # Verificar se estamos no Cloud Run
     if os.getenv('K_SERVICE'):  # Variável presente no Cloud Run
-        # No Cloud Run, a autenticação é automática
-        return True
+        st.success("☁️ Executando no Google Cloud Run - autenticação automática")
+        if project_id:
+            st.info(f"🗂️ Projeto: {project_id}")
+            st.info(f"🪣 Bucket: {bucket_name}")
+            return True
+        else:
+            st.error("❌ GOOGLE_CLOUD_PROJECT não configurado no Cloud Run")
+            return False
     
-    # Para desenvolvimento local, verificar credenciais
-    if not os.getenv('GOOGLE_APPLICATION_CREDENTIALS'):
+    # Para desenvolvimento local
+    if not project_id:
         st.warning("""
-        ⚠️ Para usar arquivos grandes em desenvolvimento local:
-        1. Configure as credenciais do Google Cloud
-        2. Defina GOOGLE_APPLICATION_CREDENTIALS
-        3. Ou execute: `gcloud auth application-default login`
+        ⚠️ Configuração GCS faltando para desenvolvimento local:
+        
+        **Opção 1: Variáveis de ambiente**
+        ```
+        set GOOGLE_CLOUD_PROJECT=groovy-rope-471520-c9
+        set GCS_BUCKET_NAME=i2a2-eda-uploads
+        ```
+        
+        **Opção 2: Autenticação manual**
+        ```
+        gcloud auth application-default login
+        gcloud config set project groovy-rope-471520-c9
+        ```
         """)
         return False
+    
+    # Verificar credenciais
+    if not os.getenv('GOOGLE_APPLICATION_CREDENTIALS'):
+        # Tentar usar credenciais padrão
+        try:
+            from google.auth import default
+            credentials, _ = default()
+            st.success("✅ Credenciais Google Cloud encontradas")
+            return True
+        except Exception as e:
+            st.warning(f"⚠️ Problema com credenciais: {e}")
+            st.info("Execute: `gcloud auth application-default login`")
+            return False
     
     return True

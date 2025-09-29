@@ -25,18 +25,22 @@ Esta solução permite o upload de arquivos CSV de até **200MB** contornando o 
 ## 🔧 Como Funciona
 
 ### 1. **Solicitação de Upload**
+
 - Usuário seleciona arquivo grande (>30MB)
 - Frontend solicita signed URL ao backend
 
 ### 2. **Geração de Signed URL**
+
 - Backend cria URL temporária (30min)
 - URL permite upload direto ao GCS
 
 ### 3. **Upload Direto**
+
 - Arquivo é enviado diretamente ao GCS
 - Não passa pelo Cloud Run (bypass do limite)
 
 ### 4. **Processamento**
+
 - Backend baixa arquivo do GCS
 - Converte para DataFrame
 - Remove arquivo temporário
@@ -58,12 +62,14 @@ GCS_BUCKET_NAME = "i2a2-eda-uploads"
 ### Permissões Necessárias
 
 O Cloud Run precisa das seguintes roles:
+
 - `Storage Object Admin` - Para criar/ler/deletar objetos
 - `Storage Admin` - Para gerenciar signed URLs
 
 ## 🛠️ Setup do Bucket
 
 ### Automático
+
 ```bash
 # Windows
 setup-gcs.bat your-project-id
@@ -73,6 +79,7 @@ setup-gcs.bat your-project-id
 ```
 
 ### Manual
+
 ```bash
 # 1. Criar bucket
 gsutil mb -p your-project-id -l us-central1 gs://i2a2-eda-uploads
@@ -108,17 +115,20 @@ gsutil lifecycle set lifecycle.json gs://i2a2-eda-uploads
 ## 🔒 Segurança
 
 ### Signed URLs
+
 - ✅ Tempo limitado (30 minutos)
 - ✅ Acesso específico (PUT apenas)
 - ✅ Tamanho limitado (200MB max)
 - ✅ Tipo MIME validado
 
 ### CORS
+
 - ✅ Domínios permitidos específicos
 - ✅ Métodos limitados
 - ✅ Headers controlados
 
 ### Limpeza Automática
+
 - ✅ Arquivos removidos após 1 dia
 - ✅ Apenas pasta "uploads/"
 - ✅ Não afeta outros arquivos
@@ -126,11 +136,13 @@ gsutil lifecycle set lifecycle.json gs://i2a2-eda-uploads
 ## 💰 Custos
 
 ### Google Cloud Storage
+
 - **Armazenamento**: $0.020 por GB/mês (Standard)
 - **Operações**: $0.005 por 1K operações
 - **Rede**: Grátis para mesmo projeto
 
 ### Estimativa Mensal
+
 ```
 100 uploads de 150MB/dia:
 - Armazenamento: ~$0.10 (temporário)
@@ -140,17 +152,18 @@ gsutil lifecycle set lifecycle.json gs://i2a2-eda-uploads
 
 ## 📊 Limites
 
-| Recurso | Limite |
-|---------|--------|
-| Tamanho máximo | 200MB |
-| Tempo de upload | 5 minutos |
+| Recurso             | Limite     |
+| ------------------- | ---------- |
+| Tamanho máximo      | 200MB      |
+| Tempo de upload     | 5 minutos  |
 | Signed URL validade | 30 minutos |
-| Retenção temporária | 1 dia |
-| Uploads simultâneos | 10 |
+| Retenção temporária | 1 dia      |
+| Uploads simultâneos | 10         |
 
 ## 🔍 Monitoramento
 
 ### Logs Úteis
+
 ```bash
 # Logs do Cloud Run
 gcloud logging read "resource.type=cloud_run_revision" --limit=50
@@ -163,6 +176,7 @@ gcloud logging read "jsonPayload.message=~'Upload.*GCS'" --limit=20
 ```
 
 ### Métricas no Console
+
 - **Cloud Run**: Requests, latência, erros
 - **Cloud Storage**: Operações, bandwidth, armazenamento
 - **Cloud Monitoring**: Dashboards customizados
@@ -172,6 +186,7 @@ gcloud logging read "jsonPayload.message=~'Upload.*GCS'" --limit=20
 ### Problemas Comuns
 
 #### 1. Erro 403 - Permissões
+
 ```bash
 # Verificar IAM
 gcloud projects get-iam-policy your-project-id
@@ -183,6 +198,7 @@ gcloud projects add-iam-policy-binding your-project-id \
 ```
 
 #### 2. CORS Error
+
 ```bash
 # Verificar CORS
 gsutil cors get gs://i2a2-eda-uploads
@@ -192,11 +208,13 @@ gsutil cors set cors.json gs://i2a2-eda-uploads
 ```
 
 #### 3. Upload Timeout
+
 - Verificar tamanho do arquivo
 - Verificar conexão de rede
 - Aumentar timeout no código
 
 #### 4. Signed URL Expirada
+
 - URLs válidas por apenas 30 minutos
 - Regenerar se necessário
 - Verificar fuso horário do servidor
@@ -204,6 +222,7 @@ gsutil cors set cors.json gs://i2a2-eda-uploads
 ## 🔄 Fallback Strategy
 
 Se GCS não estiver disponível:
+
 1. **Fallback automático** para upload tradicional
 2. **Limite de 30MB** aplicado
 3. **Aviso ao usuário** sobre limitação
@@ -212,6 +231,7 @@ Se GCS não estiver disponível:
 ## 📈 Otimizações Futuras
 
 ### Possíveis Melhorias
+
 - **Upload resumable** para arquivos muito grandes
 - **Compressão automática** antes do upload
 - **Streaming processing** para economizar memória
@@ -219,6 +239,7 @@ Se GCS não estiver disponível:
 - **Multi-part upload** para paralelização
 
 ### Alternativas
+
 - **Firebase Storage** - Mais simples para MVPs
 - **AWS S3** - Se já usando AWS
 - **Azure Blob** - Se já usando Azure
