@@ -160,35 +160,70 @@ GCS_BUCKET_NAME=i2a2-eda-uploads
     )
     
     if uploaded_file is not None:
-        # Obter dados do arquivo
         file_data = uploaded_file.getvalue()
         file_size_mb = len(file_data) / (1024 * 1024)
         filename = uploaded_file.name
         st.info(f"📊 Arquivo: {filename} ({file_size_mb:.1f} MB)")
-
-        # BLOQUEIO EXTRA: impedir upload direto de arquivos >30MB
-        if file_size_mb > 30:
-            st.error("❌ Arquivo maior que 30MB detectado! Use o método alternativo abaixo para upload via GCS.")
-            st.stop()
-
-        # SEMPRE processar via GCS para consistência
-        with st.spinner(f"🔄 Processando {filename} via Google Cloud Storage..."):
-            blob_name = gcs_manager.upload_file_direct(file_data, filename)
-            if blob_name:
-                st.success("✅ Upload para GCS concluído!")
-                with st.spinner("📥 Baixando e convertendo para DataFrame..."):
-                    df = gcs_manager.download_file_as_dataframe(blob_name)
-                if df is not None:
-                    gcs_manager.delete_file(blob_name)
-                    st.success(f"🎉 Dados carregados: {len(df):,} linhas × {len(df.columns)} colunas")
-                    return df, blob_name
-                else:
-                    st.error("❌ Erro ao converter arquivo para DataFrame")
-                    gcs_manager.delete_file(blob_name)
-                    return None, None
-            else:
-                st.error("❌ Falha no upload para Google Cloud Storage")
+        
+        if file_size_mb > 32:
+            st.warning("Arquivo grande detectado (>32MB). Usando upload via URL assinada para evitar erro 413.")
+            if not gcs_manager.is_available():
+                st.error("❌ Google Cloud Storage não está disponível. Configure as variáveis de ambiente corretamente.")
                 return None, None
+            with st.spinner(f"🔄 Gerando URL assinada para {filename}..."):
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                blob_name = f"uploads/{timestamp}_{filename}"
+                blob = gcs_manager.bucket.blob(blob_name)
+                expiration = datetime.now() + timedelta(hours=1)
+                signed_url = blob.generate_signed_url(
+                    version="v4",
+                    expiration=expiration,
+                    method="PUT",
+                    content_type="text/csv"
+                )
+            with st.spinner(f"⬆️ Enviando {filename} para GCS via URL assinada..."):
+                try:
+                    response = requests.put(
+                        signed_url,
+                        data=file_data,
+                        headers={"Content-Type": "text/csv"}
+                    )
+                    if response.status_code == 200:
+                        st.success("✅ Upload via URL assinada concluído!")
+                        with st.spinner("📥 Baixando e convertendo para DataFrame..."):
+                            df = gcs_manager.download_file_as_dataframe(blob_name)
+                        if df is not None:
+                            gcs_manager.delete_file(blob_name)
+                            st.success(f"🎉 Dados carregados: {len(df):,} linhas × {len(df.columns)} colunas")
+                            return df, blob_name
+                        else:
+                            st.error("❌ Erro ao converter arquivo para DataFrame")
+                            gcs_manager.delete_file(blob_name)
+                            return None, None
+                    else:
+                        st.error(f"❌ Falha no upload via URL assinada: {response.status_code}")
+                        return None, None
+                except Exception as e:
+                    st.error(f"❌ Erro no upload via URL assinada: {e}")
+                    return None, None
+        else:
+            with st.spinner(f"🔄 Processando {filename} via Google Cloud Storage..."):
+                blob_name = gcs_manager.upload_file_direct(file_data, filename)
+                if blob_name:
+                    st.success("✅ Upload para GCS concluído!")
+                    with st.spinner("📥 Baixando e convertendo para DataFrame..."):
+                        df = gcs_manager.download_file_as_dataframe(blob_name)
+                    if df is not None:
+                        gcs_manager.delete_file(blob_name)
+                        st.success(f"🎉 Dados carregados: {len(df):,} linhas × {len(df.columns)} colunas")
+                        return df, blob_name
+                    else:
+                        st.error("❌ Erro ao converter arquivo para DataFrame")
+                        gcs_manager.delete_file(blob_name)
+                        return None, None
+                else:
+                    st.error("❌ Falha no upload para Google Cloud Storage")
+                    return None, None
     
     # Método alternativo para arquivos muito grandes
     with st.expander("🔧 Método Alternativo para Arquivos Muito Grandes (> 30MB)"):
