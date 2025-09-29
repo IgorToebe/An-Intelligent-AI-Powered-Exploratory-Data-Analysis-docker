@@ -255,28 +255,24 @@ def upload_large_file_to_gcs(file_data: bytes, filename: str, gcs_manager: GCSMa
             st.error("❌ Erro ao gerar URL de upload")
             return None
         
-        # Fazer upload usando streaming para arquivos grandes
+        # Fazer upload usando método mais robusto
         headers = upload_info['upload_headers']
         
-        # Usar streaming para arquivos > 10MB
-        if file_size_mb > 10:
-            import io
-            file_stream = io.BytesIO(file_data)
-            
-            response = requests.put(
-                upload_info['signed_url'],
-                data=file_stream,
-                headers=headers,
-                timeout=600,  # 10 minutos para arquivos grandes
-                stream=True
-            )
-        else:
-            response = requests.put(
-                upload_info['signed_url'],
-                data=file_data,
-                headers=headers,
-                timeout=300  # 5 minutos
-            )
+        # Adicionar headers específicos para evitar erro 413
+        headers.update({
+            'Content-Length': str(len(file_data)),
+            'X-Goog-Content-Length-Range': f'0,{len(file_data)}'
+        })
+        
+        # Upload direto sem streaming para simplificar
+        st.info(f"🔄 Enviando {file_size_mb:.1f} MB para GCS...")
+        
+        response = requests.put(
+            upload_info['signed_url'],
+            data=file_data,
+            headers=headers,
+            timeout=900  # 15 minutos timeout
+        )
         
         logger.info(f"Upload response: {response.status_code}")
         
@@ -302,6 +298,7 @@ def upload_large_file_to_gcs(file_data: bytes, filename: str, gcs_manager: GCSMa
 def create_streamlit_file_uploader_with_gcs():
     """
     Cria um uploader de arquivos Streamlit com suporte a GCS para arquivos grandes.
+    FORÇA uso do GCS para TODOS os uploads, evitando erro 413.
     
     Returns:
         Tuple[pd.DataFrame, str]: DataFrame carregado e nome do blob, ou (None, None)
@@ -312,7 +309,7 @@ def create_streamlit_file_uploader_with_gcs():
     # Interface do usuário
     st.subheader("📂 Upload de Arquivo CSV")
     
-    # Sempre usar GCS para evitar limitações do Streamlit
+    # Verificar se GCS está disponível
     if not gcs_manager.is_available():
         st.error("❌ Google Cloud Storage é obrigatório para esta aplicação")
         st.info("📋 Configure as variáveis de ambiente:")
@@ -322,71 +319,58 @@ GCS_BUCKET_NAME=i2a2-eda-uploads
 """)
         return None, None
     
-    # Upload SEMPRE via GCS para evitar erro 413
+    # Interface de upload normal (drag and drop funciona)
     st.success("🚀 Upload via Google Cloud Storage (sem limitação de tamanho)")
+    st.info("💡 Arraste e solte seu arquivo CSV aqui - será processado via GCS automaticamente")
     
-    # NOVO: Interface que bypassar completamente o Streamlit file_uploader
-    st.markdown("### 📂 Upload Manual para Evitar Erro 413")
-    st.warning("⚠️ Usando file_uploader com limite de 1MB para demonstração")
+    # Usar key única para evitar cache
+    import time
+    cache_buster = str(int(time.time() * 1000))
     
-    # Usar file_uploader com limite muito baixo para forçar uso do GCS
     uploaded_file = st.file_uploader(
-        "Arquivo CSV (será processado via GCS mesmo se pequeno)",
+        "Selecione ou arraste seu arquivo CSV:",
         type=['csv'],
-        help="TODOS os arquivos são redirecionados para GCS, independente do tamanho",
-        key="forced_gcs_uploader"
+        help="Todos os arquivos são automaticamente processados via Google Cloud Storage",
+        key=f"gcs_uploader_{cache_buster}"
     )
     
     if uploaded_file:
         file_size_mb = len(uploaded_file.getvalue()) / (1024 * 1024)
         
         st.info(f"📊 Arquivo: {uploaded_file.name} ({file_size_mb:.1f} MB)")
-        st.warning("⚠️ FORÇANDO upload via GCS para evitar erro 413...")
+        st.info("☁️ Processando via Google Cloud Storage automaticamente...")
         
-        # FORÇA uso do GCS para TODOS os arquivos, independente do tamanho
-        with st.spinner("🚀 Enviando TODOS os arquivos via GCS (contornando erro 413)..."):
-            # Limitar tamanho para evitar timeout no upload inicial
-            if file_size_mb > 100:
-                st.error("❌ Arquivo muito grande (>100MB). Use o método manual.")
-                st.markdown("### 🔧 Método Alternativo:")
-                st.markdown("1. Reduza o arquivo ou use amostragem")
-                st.markdown("2. Use ferramentas externas para upload ao GCS")
-                st.markdown("3. Cole o conteúdo CSV abaixo se possível")
+        # SEMPRE processar via GCS - SEM EXCEÇÕES
+        # Processar em chunks para evitar timeout
+        try:
+            with st.spinner("Enviando para GCS..."):
+                blob_name = upload_large_file_to_gcs(
+                    uploaded_file.getvalue(),
+                    uploaded_file.name,
+                    gcs_manager
+                )
+            
+            if blob_name:
+                st.success("✅ Upload para GCS concluído! Carregando dados...")
                 
-                # Opção de colar texto
-                csv_text = st.text_area("Cole o conteúdo CSV aqui:", height=200)
-                if csv_text and st.button("Processar CSV colado"):
-                    try:
-                        from io import StringIO
-                        df = pd.read_csv(StringIO(csv_text))
-                        st.success(f"✅ CSV processado: {len(df)} linhas × {len(df.columns)} colunas")
-                        return df, "manual_paste"
-                    except Exception as e:
-                        st.error(f"❌ Erro: {e}")
-                return None, None
-            
-            blob_name = upload_large_file_to_gcs(
-                uploaded_file.getvalue(),
-                uploaded_file.name,
-                gcs_manager
-            )
-        
-        if blob_name:
-            st.success("✅ Upload concluído! Carregando dados...")
-            
-            with st.spinner("Baixando e processando dados..."):
-                df = gcs_manager.download_file_as_dataframe(blob_name)
-            
-            if df is not None:
-                # Limpar arquivo após carregar
-                gcs_manager.delete_file(blob_name)
-                st.success(f"🎉 Dados carregados: {len(df):,} linhas × {len(df.columns)} colunas")
-                return df, blob_name
+                with st.spinner("Baixando e processando dados do GCS..."):
+                    df = gcs_manager.download_file_as_dataframe(blob_name)
+                
+                if df is not None:
+                    # Limpar arquivo após carregar
+                    gcs_manager.delete_file(blob_name)
+                    st.success(f"🎉 Dados carregados: {len(df):,} linhas × {len(df.columns)} colunas")
+                    return df, blob_name
+                else:
+                    st.error("❌ Erro ao processar dados do arquivo")
+                    return None, None
             else:
-                st.error("❌ Erro ao processar dados do arquivo")
+                st.error("❌ Falha no upload para GCS")
                 return None, None
-        else:
-            st.error("❌ Falha no upload para GCS")
+                
+        except Exception as e:
+            st.error(f"❌ Erro durante processamento: {e}")
+            logger.error(f"Erro no upload: {e}")
             return None, None
     
     return None, None
