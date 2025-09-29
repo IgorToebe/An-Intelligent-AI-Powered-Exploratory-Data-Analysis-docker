@@ -32,20 +32,12 @@ scipy>=1.9.0
 
 # ========== UTILITÁRIOS ==========
 
-# Configuração
-python-dotenv>=0.19.0
-
 # Compatibilidade
 typing-extensions>=4.0.0
 pydantic>=1.10.0
 
-# ========== DOCKER/CLOUD RUN ESPECÍFICO ==========
-
 # Para health checks e monitoring
 requests>=2.25.0
-
-# Para logs estruturados
-structlog>=21.0.0
 
 # ========== GOOGLE CLOUD STORAGE ==========
 
