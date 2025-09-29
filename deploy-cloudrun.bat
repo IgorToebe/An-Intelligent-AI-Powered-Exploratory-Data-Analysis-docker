@@ -26,6 +26,18 @@ echo 🔧 Enabling required APIs...
 gcloud services enable containerregistry.googleapis.com
 gcloud services enable run.googleapis.com
 gcloud services enable cloudbuild.googleapis.com
+gcloud services enable storage.googleapis.com
+
+REM Create GCS bucket if it doesn't exist
+echo 🪣 Checking/creating GCS bucket...
+gsutil ls gs://i2a2-eda-uploads >nul 2>&1
+if errorlevel 1 (
+    echo 📦 Creating GCS bucket i2a2-eda-uploads...
+    gsutil mb -p %PROJECT_ID% -c STANDARD -l %REGION% gs://i2a2-eda-uploads
+    echo ✅ Bucket created successfully!
+) else (
+    echo ✅ Bucket i2a2-eda-uploads already exists
+)
 
 REM Build and push the image
 echo 🔨 Building Docker image...

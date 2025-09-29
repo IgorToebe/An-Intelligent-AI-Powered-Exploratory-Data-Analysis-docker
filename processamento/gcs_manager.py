@@ -394,13 +394,19 @@ def setup_gcs_environment():
     # Verificar se estamos no Cloud Run
     if os.getenv('K_SERVICE'):  # Variável presente no Cloud Run
         st.success("☁️ Executando no Google Cloud Run - autenticação automática")
-        if project_id:
+        if not project_id:
+            st.error("❌ GOOGLE_CLOUD_PROJECT não configurado no Cloud Run")
+            st.error("🚨 Google Cloud Storage não está configurado!")
+            st.markdown("📋 Configure as seguintes variáveis de ambiente:")
+            st.code("""
+GOOGLE_CLOUD_PROJECT=groovy-rope-471520-c9
+GCS_BUCKET_NAME=i2a2-eda-uploads
+        """)
+            return False
+        else:
             st.info(f"🗂️ Projeto: {project_id}")
             st.info(f"🪣 Bucket: {bucket_name}")
             return True
-        else:
-            st.error("❌ GOOGLE_CLOUD_PROJECT não configurado no Cloud Run")
-            return False
     
     # Para desenvolvimento local
     if not project_id:
