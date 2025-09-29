@@ -72,6 +72,7 @@ try:
         create_streamlit_file_uploader_with_gcs, 
         setup_gcs_environment
     )
+    from processamento.manual_uploader import create_hybrid_uploader
     # AgenteEDA será importado quando necessário (lazy loading)
     MODULES_AVAILABLE = True
 except ImportError as e:
@@ -831,8 +832,8 @@ GCS_BUCKET_NAME=i2a2-eda-uploads
         """)
         st.stop()
     
-    # Widget de upload otimizado para arquivos grandes
-    df, blob_name = create_streamlit_file_uploader_with_gcs()
+    # Widget de upload otimizado para arquivos grandes - VERSÃO ANTI-413
+    df, blob_name = create_hybrid_uploader()
     
     if df is not None:
         # Processar DataFrame carregado

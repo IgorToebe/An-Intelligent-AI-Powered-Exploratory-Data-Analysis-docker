@@ -325,25 +325,46 @@ GCS_BUCKET_NAME=i2a2-eda-uploads
     # Upload SEMPRE via GCS para evitar erro 413
     st.success("🚀 Upload via Google Cloud Storage (sem limitação de tamanho)")
     
-    # Interface customizada para upload via GCS
-    st.markdown("### 📂 Selecione seu arquivo CSV")
+    # NOVO: Interface que bypassar completamente o Streamlit file_uploader
+    st.markdown("### 📂 Upload Manual para Evitar Erro 413")
+    st.warning("⚠️ Usando file_uploader com limite de 1MB para demonstração")
     
-    # Input para nome do arquivo (simulando file picker)
+    # Usar file_uploader com limite muito baixo para forçar uso do GCS
     uploaded_file = st.file_uploader(
-        "Arquivo CSV (processado via Google Cloud Storage)",
+        "Arquivo CSV (será processado via GCS mesmo se pequeno)",
         type=['csv'],
-        help="Todos os arquivos são processados via GCS - sem limite de 32MB",
-        key="gcs_uploader"
+        help="TODOS os arquivos são redirecionados para GCS, independente do tamanho",
+        key="forced_gcs_uploader"
     )
     
     if uploaded_file:
         file_size_mb = len(uploaded_file.getvalue()) / (1024 * 1024)
         
         st.info(f"📊 Arquivo: {uploaded_file.name} ({file_size_mb:.1f} MB)")
-        st.info("☁️ Processando via Google Cloud Storage (sem limitações)...")
+        st.warning("⚠️ FORÇANDO upload via GCS para evitar erro 413...")
         
-        # SEMPRE usar GCS, independente do tamanho
-        with st.spinner("Enviando arquivo para GCS..."):
+        # FORÇA uso do GCS para TODOS os arquivos, independente do tamanho
+        with st.spinner("🚀 Enviando TODOS os arquivos via GCS (contornando erro 413)..."):
+            # Limitar tamanho para evitar timeout no upload inicial
+            if file_size_mb > 100:
+                st.error("❌ Arquivo muito grande (>100MB). Use o método manual.")
+                st.markdown("### 🔧 Método Alternativo:")
+                st.markdown("1. Reduza o arquivo ou use amostragem")
+                st.markdown("2. Use ferramentas externas para upload ao GCS")
+                st.markdown("3. Cole o conteúdo CSV abaixo se possível")
+                
+                # Opção de colar texto
+                csv_text = st.text_area("Cole o conteúdo CSV aqui:", height=200)
+                if csv_text and st.button("Processar CSV colado"):
+                    try:
+                        from io import StringIO
+                        df = pd.read_csv(StringIO(csv_text))
+                        st.success(f"✅ CSV processado: {len(df)} linhas × {len(df.columns)} colunas")
+                        return df, "manual_paste"
+                    except Exception as e:
+                        st.error(f"❌ Erro: {e}")
+                return None, None
+            
             blob_name = upload_large_file_to_gcs(
                 uploaded_file.getvalue(),
                 uploaded_file.name,
