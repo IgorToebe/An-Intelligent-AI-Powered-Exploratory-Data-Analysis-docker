@@ -1,0 +1,48 @@
+# ========== DEPENDÊNCIAS PRINCIPAIS ==========
+
+# Processamento de dados
+pandas>=1.5.0
+numpy>=1.21.0
+
+# Visualização
+matplotlib>=3.5.0
+seaborn>=0.11.0
+plotly>=5.0.0
+
+# Interface web
+streamlit>=1.28.0
+
+# ========== INTELIGÊNCIA ARTIFICIAL ==========
+
+# LangChain framework
+langchain>=0.0.350
+langchain-community>=0.0.10
+
+# Google Gemini API
+langchain-google-genai>=1.0.0
+google-generativeai>=0.3.0
+
+# ========== ANÁLISES AVANÇADAS ==========
+
+# Scikit-learn
+scikit-learn>=1.1.0
+
+# Estatística avançada
+scipy>=1.9.0
+
+# ========== UTILITÁRIOS ==========
+
+# Configuração
+python-dotenv>=0.19.0
+
+# Compatibilidade
+typing-extensions>=4.0.0
+pydantic>=1.10.0
+
+# ========== DOCKER/CLOUD RUN ESPECÍFICO ==========
+
+# Para health checks e monitoring
+requests>=2.25.0
+
+# Para logs estruturados
+structlog>=21.0.0

@@ -1,0 +1,11 @@
+# Exemplo de arquivo api-key.txt
+# Substitua pela sua chave real do Google Gemini
+
+sua-google-api-key-aqui
+
+# Como obter sua API key:
+# 1. Acesse: https://makersuite.google.com/app/apikey
+# 2. Crie um novo projeto ou selecione um existente
+# 3. Clique em "Create API Key"
+# 4. Copie a chave gerada
+# 5. Cole aqui substituindo "sua-google-api-key-aqui"
