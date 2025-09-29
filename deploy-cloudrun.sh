@@ -48,7 +48,7 @@ gcloud run deploy $SERVICE_NAME \
     --max-instances 10 \
     --min-instances 0 \
     --port 8080 \
-    --set-env-vars PORT=8080
+    --set-env-vars PORT=8080,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GCS_BUCKET_NAME=i2a2-eda-uploads
 
 echo "✅ Deployment completed!"
 echo "🌐 Your app should be available at:"

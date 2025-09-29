@@ -25,6 +25,11 @@ gcloud projects create your-project-id --name="I2A2 EDA Platform"
 
 # Configurar projeto
 gcloud config set project your-project-id
+
+# Habilitar APIs necessárias
+gcloud services enable containerregistry.googleapis.com
+gcloud services enable run.googleapis.com
+gcloud services enable storage.googleapis.com
 ```
 
 ### 2. Configurar Variáveis de Ambiente
@@ -56,6 +61,28 @@ deploy-cloudrun.bat
 ```bash
 chmod +x deploy-cloudrun.sh
 ./deploy-cloudrun.sh
+```
+
+### 5. Configurar Google Cloud Storage (para arquivos grandes)
+
+**Automático:**
+```bash
+# Windows
+setup-gcs.bat your-project-id
+
+# Linux/Mac
+chmod +x setup-gcs.sh
+./setup-gcs.sh your-project-id
+```
+
+**Manual:**
+```bash
+# Criar bucket
+gsutil mb -p your-project-id -l us-central1 gs://i2a2-eda-uploads
+
+# Configurar CORS
+echo '[{"origin":["https://*.streamlit.app","https://*.run.app"],"method":["PUT","POST"],"maxAgeSeconds":3600}]' > cors.json
+gsutil cors set cors.json gs://i2a2-eda-uploads
 ```
 
 ### 5. Deploy Manual (alternativo)

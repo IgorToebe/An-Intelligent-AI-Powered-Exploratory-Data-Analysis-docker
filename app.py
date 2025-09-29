@@ -5,7 +5,7 @@ Interface web moderna para análise exploratória de dados usando IA.
 Permite upload de CSV e interação via linguagem natural com agente inteligente.
 
 Autor: Igor Töebe Lopes Farias.
-Versão: 2.0
+Versão: 2.0.1 - SSL Fix
 """
 
 import os
@@ -17,13 +17,9 @@ from typing import Any, Dict, Optional
 import numpy as np
 import pandas as pd
 import streamlit as st
-from dotenv import load_dotenv
 
-# Carregar configurações do ambiente
-load_dotenv()
-
-# Importar gerenciador de configurações
-from config_manager import get_config, get_api_key, is_config_available, print_config_status
+# Nota: Para produção no Streamlit Cloud, use st.secrets
+# python-dotenv removido para compatibilidade com Streamlit Cloud
 
 def converter_para_arrow_compativel(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -72,10 +68,26 @@ try:
         obter_info_arquivo, 
         recomendar_estrategia_carregamento
     )
-    from agente.agente_core import AgenteEDA
+    from processamento.gcs_manager import (
+        create_streamlit_file_uploader_with_gcs, 
+        setup_gcs_environment
+    )
+    # AgenteEDA será importado quando necessário (lazy loading)
+    MODULES_AVAILABLE = True
 except ImportError as e:
     st.error(f"Erro ao importar módulos: {e}")
+    MODULES_AVAILABLE = False
     st.stop()
+
+
+def get_agente_class():
+    """Importa AgenteEDA apenas quando necessário (lazy loading)."""
+    try:
+        from agente.agente_core import AgenteEDA
+        return AgenteEDA
+    except ImportError as e:
+        st.error(f"Erro ao carregar o módulo de IA: {e}")
+        return None
 
 
 # ========== CONFIGURAÇÃO DA APLICAÇÃO ==========
@@ -709,6 +721,15 @@ def inicializar_sessao():
     para o funcionamento da aplicação.
     """
     # Configurações de sessão
+    # Tentar obter API key do Streamlit secrets (produção) ou .env (desenvolvimento)
+    api_key_default = None
+    try:
+        # Primeiro tentar st.secrets (Streamlit Cloud)
+        api_key_default = st.secrets.get("GOOGLE_API_KEY", None)
+    except (FileNotFoundError, AttributeError, KeyError):
+        # Se não houver secrets, tentar variável de ambiente
+        api_key_default = os.getenv('GOOGLE_API_KEY')
+    
     session_defaults = {
         'sessao_inicializada': True,
         'df_carregado': None,
@@ -716,7 +737,7 @@ def inicializar_sessao():
         'agente': None,
         'historico_chat': [],
         'arquivo_nome': None,
-        'api_key': get_api_key()  # Usa o gerenciador de configurações
+        'api_key': api_key_default
     }
     
     for key, default_value in session_defaults.items():
@@ -798,15 +819,79 @@ def carregar_arquivo():
     </div>
     """, unsafe_allow_html=True)
     
-    # Widget de upload
-    arquivo_upload = st.file_uploader(
-        "Selecionar dataset para análise estatística",
-        type=['csv'],
-        help="Suporta arquivos CSV com até 200MB — adequado para análise exploratória estatística"
-    )
+    # Configurar ambiente GCS
+    setup_gcs_environment()
     
-    if arquivo_upload is not None:
-        _processar_upload_arquivo(arquivo_upload)
+    # Widget de upload otimizado para arquivos grandes
+    df, blob_name = create_streamlit_file_uploader_with_gcs()
+    
+    if df is not None:
+        # Processar DataFrame carregado
+        _processar_dataframe_carregado(df, blob_name)
+
+
+def _processar_dataframe_carregado(df: pd.DataFrame, blob_name: Optional[str] = None):
+    """
+    Processa o DataFrame carregado (via upload tradicional ou GCS).
+    
+    Args:
+        df: DataFrame carregado
+        blob_name: Nome do blob no GCS (se aplicável)
+    """
+    try:
+        # Converter para tipos compatíveis com Arrow
+        df = converter_para_arrow_compativel(df)
+        
+        # Simular informações de arquivo para compatibilidade
+        info_arquivo = {
+            'tamanho_mb': len(df) * len(df.columns) * 8 / (1024 * 1024),  # Estimativa
+            'num_linhas': len(df),
+            'num_colunas': len(df.columns),
+            'memoria_estimada_mb': df.memory_usage(deep=True).sum() / (1024 * 1024)
+        }
+        
+        # Mostrar informações do DataFrame
+        st.success(f"✅ **Dataset carregado com sucesso!**")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("📊 Linhas", f"{info_arquivo['num_linhas']:,}")
+        with col2:
+            st.metric("📋 Colunas", info_arquivo['num_colunas'])
+        with col3:
+            st.metric("💾 Memória", f"{info_arquivo['memoria_estimada_mb']:.1f} MB")
+        with col4:
+            fonte = "☁️ GCS" if blob_name else "📁 Local"
+            st.metric("📂 Fonte", fonte)
+        
+        # Salvar na sessão
+        st.session_state.df_carregado = df
+        st.session_state.info_arquivo = info_arquivo
+        st.session_state.arquivo_carregado = True
+        
+        # Mostrar prévia do dataset
+        st.markdown("### 👀 Prévia do Dataset")
+        st.dataframe(df.head(10), use_container_width=True)
+        
+        # Botão para iniciar análise
+        st.markdown("---")
+        if st.button("🚀 Iniciar Análise Exploratória", type="primary", use_container_width=True):
+            # Verificar API key
+            if not st.session_state.get('api_key'):
+                st.error("⚠️ Configure sua API key do Google Gemini nas configurações para continuar.")
+                return
+            
+            # Inicializar agente
+            with st.spinner("🤖 Inicializando agente de IA..."):
+                AgenteEDA = get_agente_class()
+                if AgenteEDA:
+                    st.session_state.agente = AgenteEDA(df, api_key=st.session_state.api_key)
+                    st.session_state.analise_iniciada = True
+                    st.rerun()
+        
+    except Exception as e:
+        st.error(f"❌ Erro ao processar dados: {e}")
+        st.error("Verifique se o arquivo está no formato correto (CSV com cabeçalhos)")
 
 
 def _processar_upload_arquivo(arquivo_upload):
@@ -891,7 +976,9 @@ def _carregar_e_inicializar_dados(caminho_temp, nome_arquivo, info_arquivo,
         
         # Inicializar agente IA
         with st.spinner("Inicializando agente IA..."):
-            st.session_state.agente = AgenteEDA(df, api_key=st.session_state.api_key)
+            AgenteEDA = get_agente_class()
+            if AgenteEDA:
+                st.session_state.agente = AgenteEDA(df, api_key=st.session_state.api_key)
         
         # Feedback de sucesso
         memoria_mb = df.memory_usage(deep=True).sum() / (1024**2)
@@ -1112,7 +1199,7 @@ def interface_chat():
                 """, unsafe_allow_html=True)
                 try:
                     if os.path.exists(conteudo):
-                        st.image(conteudo, caption=f"Gráfico: {os.path.basename(conteudo)}", use_container_width=True)
+                        st.image(conteudo, caption=f"Gráfico: {os.path.basename(conteudo)}", use_column_width=True)
                     else:
                         st.markdown("""
                         <div class="notification-error">
@@ -1269,14 +1356,6 @@ def sidebar_informacoes():
         
         st.markdown("<div style='margin: 2rem 0;'></div>", unsafe_allow_html=True)
         
-        # Verificar status da configuração
-        config_status = is_config_available()
-        api_key_from_config = get_api_key()
-        
-        # Inicializar chave da sessão com a configuração se disponível
-        if api_key_from_config and not st.session_state.get('api_key'):
-            st.session_state.api_key = api_key_from_config
-        
         # Campo de API key com exibição mascarada
         api_key_stored = st.session_state.get('api_key', '')
         api_key_display = ''
@@ -1288,85 +1367,29 @@ def sidebar_informacoes():
                 api_key_display = '*' * len(api_key_stored)
         
         st.markdown("<div style='text-align: center; margin: 1rem 0;'><small style='color: var(--text-secondary); font-weight: 500;'>Configuração da API</small></div>", unsafe_allow_html=True)
-        
-        # Mostrar fonte da configuração se disponível
-        if config_status and not api_key_stored:
-            # API key vem das configurações (secrets ou .env)
-            try:
-                if hasattr(st, 'secrets') and 'GOOGLE_API_KEY' in st.secrets:
-                    st.markdown("""
-                    <div style="background: var(--background-elevated); border: 1px solid var(--success-color); padding: 0.5rem; border-radius: 4px; color: var(--success-color); margin-bottom: 0.5rem;">
-                        <small><strong>✅ Streamlit Cloud Secrets</strong><br>API configurada automaticamente</small>
-                    </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.markdown("""
-                    <div style="background: var(--background-elevated); border: 1px solid var(--success-color); padding: 0.5rem; border-radius: 4px; color: var(--success-color); margin-bottom: 0.5rem;">
-                        <small><strong>✅ Environment (.env)</strong><br>API configurada automaticamente</small>
-                    </div>
-                    """, unsafe_allow_html=True)
-                # Usar a chave das configurações
-                st.session_state.api_key = api_key_from_config
-            except Exception:
-                pass
-        
-        # Campo de entrada apenas se não há configuração automática
-        if not config_status or api_key_stored:
-            api_key = st.text_input(
-                "Intelligence Engine API Key", 
-                value=api_key_display,
-                help="Enter your Google Gemini API key for advanced AI analysis",
-                label_visibility="collapsed",
-                placeholder="Cole sua Google Gemini API Key aqui..."
-            )
+        api_key = st.text_input(
+            "Intelligence Engine API Key", 
+            value=api_key_display,
+            help="Enter your Google Gemini API key for advanced AI analysis",
+            label_visibility="collapsed"
+        )
+        if api_key:
+            # Verifica se a API key mudou (ignorar se for a versão mascarada)
+            api_key_mudou = False
             
-            if api_key:
-                # Verifica se a API key mudou (ignorar se for a versão mascarada)
-                api_key_mudou = False
-                
-                # Se a chave digitada não contém asteriscos, é uma nova chave
-                if '*' not in api_key:
-                    api_key_mudou = ('api_key' not in st.session_state or 
-                                   st.session_state.api_key != api_key)
-                    st.session_state.api_key = api_key
-                # Se contém asteriscos, usar a chave armazenada
-                elif 'api_key' in st.session_state:
-                    api_key = st.session_state.api_key
-                    
-                st.markdown("""
-                <div style="background: var(--background-elevated); border: 1px solid var(--success-color); padding: 0.5rem; border-radius: 4px; color: var(--success-color);">
-                    <small><strong>✅ Manual Input</strong><br>API configurada via interface</small>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Recria o agente se a API key mudou e há dados carregados
-                if api_key_mudou and st.session_state.df_carregado is not None:
-                    try:
-                        st.session_state.agente = AgenteEDA(st.session_state.df_carregado, api_key=st.session_state.api_key)
-                        st.rerun()
-                    except Exception as e:
-                        st.markdown(f"""
-                        <div style="background: rgba(231, 76, 60, 0.15); padding: 0.5rem; border-radius: 6px; color: var(--error-color);">
-                            <small><strong>Erro de Configuração:</strong> {str(e)}</small>
-                        </div>
-                        """, unsafe_allow_html=True)
-            else:
-                # Mostrar instruções se não há API key
-                st.markdown("""
-                <div style="background: rgba(255, 193, 7, 0.15); border: 1px solid rgba(255, 193, 7, 0.3); padding: 0.75rem; border-radius: 8px; color: var(--warning-color); margin: 0.5rem 0;">
-                    <small><strong>⚠️ API Key Necessária</strong><br>
-                    Para usar análise com IA, configure:<br>
-                    • <strong>Streamlit Cloud:</strong> Secrets (recomendado)<br>
-                    • <strong>Local:</strong> Arquivo .env<br>
-                    • <strong>Manual:</strong> Campo acima<br><br>
-                    <a href="https://makersuite.google.com/app/apikey" target="_blank" style="color: var(--warning-color);">🔗 Obter API Key Gratuita</a>
-                    </small>
-                </div>
-                """, unsafe_allow_html=True)
-        
-        # Se há API key configurada (de qualquer fonte)
-        if st.session_state.get('api_key'):
-            api_key = st.session_state.api_key
+            # Se a chave digitada não contém asteriscos, é uma nova chave
+            if '*' not in api_key:
+                api_key_mudou = ('api_key' not in st.session_state or 
+                               st.session_state.api_key != api_key)
+                st.session_state.api_key = api_key
+            # Se contém asteriscos, usar a chave armazenada
+            elif 'api_key' in st.session_state:
+                api_key = st.session_state.api_key
+            st.markdown("""
+            <div style="background: var(--background-elevated); border: 1px solid var(--success-color); padding: 0.5rem; border-radius: 4px; color: var(--success-color);">
+                <small><strong>API Active</strong></small>
+            </div>
+            """, unsafe_allow_html=True)
             
             # Espaço proporcional entre seções
             st.markdown("<div style='margin: 1rem 0;'></div>", unsafe_allow_html=True)
@@ -1374,7 +1397,9 @@ def sidebar_informacoes():
             # Recria o agente se a API key mudou e há dados carregados
             if api_key_mudou and st.session_state.df_carregado is not None:
                 try:
-                    st.session_state.agente = AgenteEDA(st.session_state.df_carregado, api_key=st.session_state.api_key)
+                    AgenteEDA = get_agente_class()
+                    if AgenteEDA:
+                        st.session_state.agente = AgenteEDA(st.session_state.df_carregado, api_key=st.session_state.api_key)
                     # Verificar se o agente está usando LLM
                     if hasattr(st.session_state.agente, 'llm_disponivel') and st.session_state.agente.llm_disponivel:
                         st.markdown("""
@@ -1629,7 +1654,7 @@ def main():
                     if arquivos:
                         for p in arquivos[:15]:  # Reduzir para performance
                             st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                            st.image(str(p), use_container_width=True)
+                            st.image(str(p), use_column_width=True)
                             st.markdown(f"<div style='color: var(--text-secondary); font-size:0.95rem; margin-top:0.4rem;'>" + p.name + "</div>", unsafe_allow_html=True)
                             st.markdown('</div>', unsafe_allow_html=True)
                     else:
@@ -1665,7 +1690,7 @@ def main():
                             if arquivos:
                                 for p in arquivos[:10]:  # Limitar para performance
                                     st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                                    st.image(str(p), use_container_width=True)
+                                    st.image(str(p), use_column_width=True)
                                     st.markdown(f"<div style='color: var(--text-secondary); font-size:0.95rem; margin-top:0.4rem;'>" + p.name + "</div>", unsafe_allow_html=True)
                                     st.markdown('</div>', unsafe_allow_html=True)
                             else:

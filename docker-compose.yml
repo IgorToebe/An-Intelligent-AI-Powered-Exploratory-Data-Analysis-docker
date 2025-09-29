@@ -8,6 +8,8 @@ services:
     environment:
       - PORT=8080
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-your-project-id}
+      - GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-i2a2-eda-uploads}
     volumes:
       - ./temp_graficos:/app/temp_graficos
     restart: unless-stopped
