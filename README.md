@@ -1,19 +1,23 @@
 # 🤖 Plataforma de Análise Exploratória Inteligente
 
 Uma aplicação web avançada para análise exploratória de dados usando inteligência artificial.
+**Otimizada para Google Cloud Run com suporte a arquivos grandes (150MB+).**
 
 ## ✨ Funcionalidades
 
-- **🔍 Análise Exploratória Automática**: Análise inteligente de datasets com insights automáticos
+- **� Upload de Arquivos Grandes**: Suporte a CSV de 150MB+ via Google Cloud Storage
+- **�🔍 Análise Exploratória Automática**: Análise inteligente de datasets com insights automáticos
 - **📊 Visualizações Avançadas**: Gráficos interativos e personalizáveis
 - **🤖 Análises Avançadas**: Clustering inteligente (K-Means, DBSCAN) com otimização automática
 - **📈 Testes Estatísticos**: Testes de normalidade, correlação, Mann-Whitney, qui-quadrado
+- **☁️ Cloud Native**: Otimizado para Google Cloud Run
 - **🎨 Interface Moderna**: Interface web responsiva e intuitiva
 
 ## 🛠️ Stack Tecnológico
 
 - **Frontend**: Streamlit
 - **Backend**: Python 3.11+
+- **Cloud**: Google Cloud Run + Google Cloud Storage
 - **IA**: Google Gemini API + LangChain
 - **Análises Avançadas**: Scikit-learn
 - **Análise**: Pandas + NumPy
@@ -56,12 +60,33 @@ streamlit run app.py
 
 📖 **Instruções detalhadas**: [DEPLOY_GUIDE.md](DEPLOY_GUIDE.md)
 
+## � Upload de Arquivos Grandes (150MB+)
+
+### 🚀 **Método Signed URL (Recomendado)**
+
+1. **Gerar Link**: Na aplicação, digite o nome do arquivo e clique em "Gerar Link"
+2. **Upload via Terminal**:
+   ```bash
+   # Linux/Mac
+   curl -X PUT -H "Content-Type: text/csv" --data-binary @arquivo.csv "SIGNED_URL"
+   
+   # Windows PowerShell  
+   Invoke-RestMethod -Uri "SIGNED_URL" -Method Put -InFile "arquivo.csv" -ContentType "text/csv"
+   ```
+3. **Processar**: Na aplicação, cole o nome do blob e clique em "Processar"
+
+### 🌐 **Método URL Pública**
+- Cole a URL de um arquivo CSV online
+- Suporte automático para arquivos de qualquer tamanho
+
+📖 **Guia detalhado**: [CLOUD-RUN-150MB.md](CLOUD-RUN-150MB.md)
+
 ## 📝 Como Usar
 
-1. **Upload de Dados**: Faça upload de um arquivo CSV
+1. **Upload de Dados**: Use signed URLs para arquivos grandes ou URLs públicas
 2. **Análise IA**: Use linguagem natural para fazer perguntas sobre seus dados
 3. **Visualizações**: Explore gráficos interativos e análises estatísticas
-4. **Análises Avançadas**: Aplique clustering, redução de dimensionalidade e outros algoritmos de análise exploratória
+4. **Análises Avançadas**: Aplique clustering, redução de dimensionalidade e outros algoritmos
 
 ## 📊 Exemplos de Comandos
 

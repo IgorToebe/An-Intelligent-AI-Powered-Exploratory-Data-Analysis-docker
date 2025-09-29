@@ -1,12 +1,10 @@
 """
-Google Cloud Storage Manager para Upload de Arquivos Grandes
-
-Este módulo gerencia uploads de arquivos grandes (150MB+) usando signed URLs
-para contornar o limite de 32MB do Cloud Run.
+Google Cloud Storage Manager - Versão Cloud Run
+Especificamente otimizada para contornar o limite de 32MB do Cloud Run
+usando APENAS signed URLs para arquivos grandes (150MB+)
 """
 
 import os
-import json
 import tempfile
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, Tuple
@@ -16,18 +14,10 @@ import pandas as pd
 
 try:
     from google.cloud import storage
-    from google.auth import default
-    import google.auth.exceptions
     GCS_AVAILABLE = True
-    StorageClient = storage.Client
-    Bucket = storage.Bucket
-    Blob = storage.Blob
 except ImportError:
     GCS_AVAILABLE = False
     storage = None
-    StorageClient = None
-    Bucket = None
-    Blob = None
 
 import requests
 import logging
@@ -36,102 +26,48 @@ logger = logging.getLogger(__name__)
 
 
 class GCSManager:
-    """Gerenciador de arquivos no Google Cloud Storage."""
+    """Gerenciador otimizado para Cloud Run - apenas arquivos grandes via GCS."""
     
-    def __init__(self, bucket_name: Optional[str] = None, project_id: Optional[str] = None):
-        """
-        Inicializa o gerenciador GCS.
+    def __init__(self):
+        self.bucket_name = os.getenv('GCS_BUCKET_NAME', 'i2a2-eda-uploads')
+        self.project_id = os.getenv('GOOGLE_CLOUD_PROJECT')
+        self.client = None
+        self.bucket = None
         
-        Args:
-            bucket_name: Nome do bucket GCS
-            project_id: ID do projeto Google Cloud
-        """
-        self.bucket_name = bucket_name or os.getenv('GCS_BUCKET_NAME', 'i2a2-eda-uploads')
-        self.project_id = project_id or os.getenv('GOOGLE_CLOUD_PROJECT')
-        self.client = None  # type: Optional[Any]
-        self.bucket = None  # type: Optional[Any]
-        
-        # Configurações de upload
-        self.upload_timeout = 300  # 5 minutos
-        self.chunk_size = 8 * 1024 * 1024  # 8MB chunks
-        
-        self._initialize_client()
-    
-    def _initialize_client(self):
-        """Inicializa o cliente GCS."""
-        if not GCS_AVAILABLE:
-            logger.warning("Google Cloud Storage não disponível")
-            return False
-            
-        try:
-            # Tentar autenticação automática (funciona no Cloud Run)
-            if GCS_AVAILABLE and storage:
+        if GCS_AVAILABLE and self.project_id:
+            try:
                 self.client = storage.Client(project=self.project_id)
                 self.bucket = self.client.bucket(self.bucket_name)
-                return True
-            return False
-        except Exception as e:
-            logger.error(f"Erro ao inicializar GCS: {e}")
-            return False
+            except Exception as e:
+                logger.error(f"Erro GCS: {e}")
     
     def is_available(self) -> bool:
-        """Verifica se o GCS está disponível e configurado."""
         return GCS_AVAILABLE and self.client is not None
     
-    def generate_signed_upload_url(
-        self, 
-        filename: str, 
-        content_type: str = "text/csv",
-        expiration_minutes: int = 30
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Gera uma signed URL para upload direto ao GCS.
-        
-        Args:
-            filename: Nome do arquivo
-            content_type: Tipo MIME do arquivo
-            expiration_minutes: Minutos até expirar a URL
-            
-        Returns:
-            Dict com informações da signed URL ou None se erro
-        """
-        if not self.is_available() or not self.bucket:
+    def generate_signed_upload_url(self, filename: str) -> Optional[Dict[str, Any]]:
+        """Gera signed URL para upload direto ao GCS."""
+        if not self.is_available():
             return None
             
         try:
-            # Gerar nome único para o arquivo
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             blob_name = f"uploads/{timestamp}_{filename}"
-            
             blob = self.bucket.blob(blob_name)
             
-            # Configurar metadados
-            blob.metadata = {
-                'uploaded_at': datetime.now().isoformat(),
-                'original_filename': filename,
-                'content_type': content_type
-            }
-            
-            # Gerar signed URL para upload
-            expiration = datetime.now() + timedelta(minutes=expiration_minutes)
+            # URL válida por 1 hora
+            expiration = datetime.now() + timedelta(hours=1)
             
             signed_url = blob.generate_signed_url(
                 version="v4",
                 expiration=expiration,
                 method="PUT",
-                content_type=content_type,
-                headers={'x-goog-content-length-range': '0,209715200'}  # Max 200MB
+                content_type="text/csv"
             )
             
             return {
                 'signed_url': signed_url,
                 'blob_name': blob_name,
-                'bucket_name': self.bucket_name,
-                'expires_at': expiration.isoformat(),
-                'content_type': content_type,
-                'upload_headers': {
-                    'Content-Type': content_type,
-                }
+                'expires_at': expiration.isoformat()
             }
             
         except Exception as e:
@@ -139,310 +75,186 @@ class GCSManager:
             return None
     
     def download_file_as_dataframe(self, blob_name: str) -> Optional[pd.DataFrame]:
-        """
-        Baixa um arquivo do GCS e converte para DataFrame.
-        
-        Args:
-            blob_name: Nome do blob no GCS
-            
-        Returns:
-            DataFrame do pandas ou None se erro
-        """
-        if not self.is_available() or not self.bucket:
+        """Baixa arquivo do GCS e converte para DataFrame."""
+        if not self.is_available():
             return None
             
         try:
             blob = self.bucket.blob(blob_name)
-            
             if not blob.exists():
-                logger.error(f"Arquivo {blob_name} não encontrado no GCS")
                 return None
             
-            # Baixar para arquivo temporário
             with tempfile.NamedTemporaryFile(mode='wb', delete=False, suffix='.csv') as tmp_file:
                 blob.download_to_filename(tmp_file.name)
-                
-                # Ler como DataFrame
                 try:
                     df = pd.read_csv(tmp_file.name)
                     return df
-                except Exception as e:
-                    logger.error(f"Erro ao ler CSV: {e}")
-                    return None
                 finally:
-                    # Limpar arquivo temporário
                     os.unlink(tmp_file.name)
                     
         except Exception as e:
-            logger.error(f"Erro ao baixar arquivo do GCS: {e}")
+            logger.error(f"Erro ao baixar: {e}")
             return None
     
     def delete_file(self, blob_name: str) -> bool:
-        """
-        Deleta um arquivo do GCS.
-        
-        Args:
-            blob_name: Nome do blob no GCS
-            
-        Returns:
-            True se sucesso, False se erro
-        """
-        if not self.is_available() or not self.bucket:
+        """Remove arquivo do GCS após processamento."""
+        if not self.is_available():
             return False
-            
         try:
             blob = self.bucket.blob(blob_name)
             blob.delete()
             return True
-        except Exception as e:
-            logger.error(f"Erro ao deletar arquivo: {e}")
+        except:
             return False
-    
-    def list_user_files(self, prefix: str = "uploads/") -> list:
-        """
-        Lista arquivos do usuário no GCS.
-        
-        Args:
-            prefix: Prefixo para filtrar arquivos
-            
-        Returns:
-            Lista de informações dos arquivos
-        """
-        if not self.is_available() or not self.client:
-            return []
-            
-        try:
-            blobs = self.client.list_blobs(self.bucket_name, prefix=prefix)
-            
-            files = []
-            for blob in blobs:
-                files.append({
-                    'name': blob.name,
-                    'size': blob.size,
-                    'created': blob.time_created,
-                    'updated': blob.updated,
-                    'content_type': blob.content_type,
-                    'metadata': blob.metadata or {}
-                })
-            
-            return files
-            
-        except Exception as e:
-            logger.error(f"Erro ao listar arquivos: {e}")
-            return []
-
-
-def upload_large_file_to_gcs(file_data: bytes, filename: str, gcs_manager: GCSManager) -> Optional[str]:
-    """
-    Upload de arquivo grande usando signed URL com streaming.
-    
-    Args:
-        file_data: Dados do arquivo em bytes
-        filename: Nome do arquivo
-        gcs_manager: Instância do GCSManager
-        
-    Returns:
-        Nome do blob no GCS ou None se erro
-    """
-    try:
-        # Verificar tamanho
-        file_size_mb = len(file_data) / (1024 * 1024)
-        logger.info(f"Iniciando upload de {filename} ({file_size_mb:.1f} MB)")
-        
-        # Gerar signed URL
-        upload_info = gcs_manager.generate_signed_upload_url(filename)
-        if not upload_info:
-            st.error("❌ Erro ao gerar URL de upload")
-            return None
-        
-        # Fazer upload usando método mais robusto
-        headers = upload_info['upload_headers']
-        
-        # Adicionar headers específicos para evitar erro 413
-        headers.update({
-            'Content-Length': str(len(file_data)),
-            'X-Goog-Content-Length-Range': f'0,{len(file_data)}'
-        })
-        
-        # Upload direto sem streaming para simplificar
-        st.info(f"🔄 Enviando {file_size_mb:.1f} MB para GCS...")
-        
-        response = requests.put(
-            upload_info['signed_url'],
-            data=file_data,
-            headers=headers,
-            timeout=900  # 15 minutos timeout
-        )
-        
-        logger.info(f"Upload response: {response.status_code}")
-        
-        if response.status_code == 200:
-            st.success(f"✅ Arquivo {filename} enviado com sucesso!")
-            logger.info(f"Upload successful: {upload_info['blob_name']}")
-            return upload_info['blob_name']
-        elif response.status_code == 413:
-            st.error("❌ Arquivo muito grande. Verifique configuração do servidor.")
-            logger.error(f"Erro 413 - Payload too large para {filename}")
-            return None
-        else:
-            st.error(f"❌ Erro no upload: {response.status_code} - {response.text}")
-            logger.error(f"Upload error: {response.status_code} - {response.text}")
-            return None
-            
-    except Exception as e:
-        st.error(f"❌ Erro durante upload: {e}")
-        logger.error(f"Erro no upload para GCS: {e}")
-        return None
 
 
 def create_streamlit_file_uploader_with_gcs():
     """
-    Cria um uploader de arquivos Streamlit com suporte a GCS para arquivos grandes.
-    FORÇA uso do GCS para TODOS os uploads, evitando erro 413.
-    
-    Returns:
-        Tuple[pd.DataFrame, str]: DataFrame carregado e nome do blob, ou (None, None)
+    Interface Cloud Run - APENAS signed URLs para arquivos 150MB+
+    Elimina completamente st.file_uploader para evitar erro 413
     """
-    # Inicializar GCS Manager
     gcs_manager = GCSManager()
     
-    # Interface do usuário
-    st.subheader("📂 Upload de Arquivo CSV")
+    st.subheader("📂 Upload de Arquivo CSV (150MB+)")
     
-    # Verificar se GCS está disponível
     if not gcs_manager.is_available():
-        st.error("❌ Google Cloud Storage é obrigatório para esta aplicação")
-        st.info("📋 Configure as variáveis de ambiente:")
-        st.code("""
-GOOGLE_CLOUD_PROJECT=groovy-rope-471520-c9
-GCS_BUCKET_NAME=i2a2-eda-uploads
-""")
+        st.error("❌ Google Cloud Storage não configurado")
+        st.code("Configure: GOOGLE_CLOUD_PROJECT=groovy-rope-471520-c9")
         return None, None
     
-    # Interface de upload normal (drag and drop funciona)
-    st.success("🚀 Upload via Google Cloud Storage (sem limitação de tamanho)")
-    st.info("💡 Arraste e solte seu arquivo CSV aqui - será processado via GCS automaticamente")
+    # MÉTODO ÚNICO: Signed URL do GCS
+    st.success("☁️ Google Cloud Run - Upload via Signed URL")
+    st.info("💡 Método otimizado para arquivos grandes (150MB+)")
     
-    # Usar key única para evitar cache
-    import time
-    cache_buster = str(int(time.time() * 1000))
-    
-    uploaded_file = st.file_uploader(
-        "Selecione ou arraste seu arquivo CSV:",
-        type=['csv'],
-        help="Todos os arquivos são automaticamente processados via Google Cloud Storage",
-        key=f"gcs_uploader_{cache_buster}"
+    # Gerar signed URL
+    filename = st.text_input(
+        "Nome do arquivo CSV:",
+        placeholder="meus_dados.csv",
+        help="Digite o nome do arquivo que você vai enviar"
     )
     
-    if uploaded_file:
-        file_size_mb = len(uploaded_file.getvalue()) / (1024 * 1024)
+    if filename and st.button("🔗 Gerar Link de Upload"):
+        upload_info = gcs_manager.generate_signed_upload_url(filename)
         
-        st.info(f"📊 Arquivo: {uploaded_file.name} ({file_size_mb:.1f} MB)")
-        st.info("☁️ Processando via Google Cloud Storage automaticamente...")
-        
-        # SEMPRE processar via GCS - SEM EXCEÇÕES
-        # Processar em chunks para evitar timeout
-        try:
-            with st.spinner("Enviando para GCS..."):
-                blob_name = upload_large_file_to_gcs(
-                    uploaded_file.getvalue(),
-                    uploaded_file.name,
-                    gcs_manager
-                )
+        if upload_info:
+            st.success("✅ Link de upload gerado!")
             
-            if blob_name:
-                st.success("✅ Upload para GCS concluído! Carregando dados...")
+            # Instruções claras
+            st.markdown("### 📋 Instruções de Upload:")
+            st.markdown("1. **Copie o link abaixo**")
+            st.code(upload_info['signed_url'])
+            
+            st.markdown("2. **Execute o comando no terminal:**")
+            st.code(f'curl -X PUT -H "Content-Type: text/csv" --data-binary @{filename} "{upload_info["signed_url"]}"')
+            
+            st.markdown("3. **Ou use PowerShell:**")
+            st.code(f'Invoke-RestMethod -Uri "{upload_info["signed_url"]}" -Method Put -InFile "{filename}" -ContentType "text/csv"')
+            
+            st.markdown("4. **Após o upload, digite o nome do blob:**")
+            
+            # Armazenar info no session state
+            st.session_state.last_blob_name = upload_info['blob_name']
+            st.session_state.upload_filename = filename
+    
+    # Processar arquivo após upload
+    if 'last_blob_name' in st.session_state:
+        st.markdown("### 📥 Processar Arquivo Enviado")
+        
+        blob_name = st.text_input(
+            "Nome do blob no GCS:",
+            value=st.session_state.last_blob_name,
+            help="Nome gerado automaticamente após o upload"
+        )
+        
+        if st.button("📊 Carregar e Processar Dados"):
+            with st.spinner("Baixando e processando arquivo..."):
+                df = gcs_manager.download_file_as_dataframe(blob_name)
+            
+            if df is not None:
+                # Limpar arquivo após carregar
+                gcs_manager.delete_file(blob_name)
                 
-                with st.spinner("Baixando e processando dados do GCS..."):
-                    df = gcs_manager.download_file_as_dataframe(blob_name)
+                # Limpar session state
+                if 'last_blob_name' in st.session_state:
+                    del st.session_state.last_blob_name
+                if 'upload_filename' in st.session_state:
+                    del st.session_state.upload_filename
                 
-                if df is not None:
-                    # Limpar arquivo após carregar
-                    gcs_manager.delete_file(blob_name)
-                    st.success(f"🎉 Dados carregados: {len(df):,} linhas × {len(df.columns)} colunas")
-                    return df, blob_name
-                else:
-                    st.error("❌ Erro ao processar dados do arquivo")
-                    return None, None
+                st.success(f"🎉 Arquivo processado: {len(df):,} linhas × {len(df.columns)} colunas")
+                return df, blob_name
             else:
-                st.error("❌ Falha no upload para GCS")
-                return None, None
+                st.error("❌ Erro ao processar arquivo ou arquivo não encontrado")
+    
+    # Alternativa: URL pública
+    st.markdown("---")
+    st.markdown("### 🌐 Alternativa: Arquivo via URL")
+    st.info("Para arquivos já hospedados online")
+    
+    csv_url = st.text_input("URL do arquivo CSV:", placeholder="https://example.com/data.csv")
+    
+    if csv_url and st.button("📥 Baixar da URL"):
+        try:
+            with st.spinner("Baixando arquivo da URL..."):
+                response = requests.get(csv_url, timeout=120)
+                response.raise_for_status()
                 
+                # Verificar se é CSV
+                content_type = response.headers.get('content-type', '')
+                if 'csv' not in content_type and not csv_url.endswith('.csv'):
+                    st.warning("⚠️ Arquivo pode não ser CSV válido")
+                
+                # Processar diretamente se pequeno, ou via GCS se grande
+                size_mb = len(response.content) / (1024 * 1024)
+                
+                if size_mb > 30:  # > 30MB via GCS
+                    st.info(f"📊 Arquivo grande ({size_mb:.1f} MB) - processando via GCS")
+                    
+                    filename = csv_url.split('/')[-1] or 'arquivo_url.csv'
+                    
+                    # Upload para GCS
+                    upload_info = gcs_manager.generate_signed_upload_url(filename)
+                    if upload_info:
+                        # Upload direto via requests
+                        upload_response = requests.put(
+                            upload_info['signed_url'],
+                            data=response.content,
+                            headers={'Content-Type': 'text/csv'},
+                            timeout=300
+                        )
+                        
+                        if upload_response.status_code == 200:
+                            df = gcs_manager.download_file_as_dataframe(upload_info['blob_name'])
+                            if df is not None:
+                                gcs_manager.delete_file(upload_info['blob_name'])
+                                st.success(f"✅ Processado: {len(df)} linhas × {len(df.columns)} colunas")
+                                return df, f"url_{filename}"
+                else:
+                    # Arquivo pequeno - processar diretamente
+                    from io import StringIO
+                    df = pd.read_csv(StringIO(response.text))
+                    st.success(f"✅ Processado: {len(df)} linhas × {len(df.columns)} colunas")
+                    return df, "url_small"
+                    
         except Exception as e:
-            st.error(f"❌ Erro durante processamento: {e}")
-            logger.error(f"Erro no upload: {e}")
-            return None, None
+            st.error(f"❌ Erro ao processar URL: {e}")
     
     return None, None
 
 
-# Configurações de ambiente para GCS
 def setup_gcs_environment():
-    """Configura e verifica variáveis de ambiente necessárias para GCS."""
-    
-    # Verificar variáveis de ambiente obrigatórias
+    """Verifica configuração GCS para Cloud Run."""
     project_id = os.getenv('GOOGLE_CLOUD_PROJECT')
     bucket_name = os.getenv('GCS_BUCKET_NAME', 'i2a2-eda-uploads')
     
-    # Tentar obter do secrets.toml se não estiver nas env vars
-    if not project_id:
-        try:
-            project_id = st.secrets.get("GOOGLE_CLOUD_PROJECT")
-            bucket_name = st.secrets.get("GCS_BUCKET_NAME", "i2a2-eda-uploads")
-            
-            if project_id:
-                st.info(f"📋 Usando configuração do secrets.toml: {project_id}")
-            
-        except Exception:
-            pass
-    
-    # Verificar se estamos no Cloud Run
-    if os.getenv('K_SERVICE'):  # Variável presente no Cloud Run
-        st.success("☁️ Executando no Google Cloud Run - autenticação automática")
-        if not project_id:
-            st.error("❌ GOOGLE_CLOUD_PROJECT não configurado no Cloud Run")
-            st.error("🚨 Google Cloud Storage não está configurado!")
-            st.markdown("📋 Configure as seguintes variáveis de ambiente:")
-            st.code("""
-GOOGLE_CLOUD_PROJECT=groovy-rope-471520-c9
-GCS_BUCKET_NAME=i2a2-eda-uploads
-        """)
-            return False
-        else:
+    if os.getenv('K_SERVICE'):  # Cloud Run
+        st.success("☁️ Google Cloud Run detectado")
+        if project_id:
             st.info(f"🗂️ Projeto: {project_id}")
             st.info(f"🪣 Bucket: {bucket_name}")
             return True
-    
-    # Para desenvolvimento local
-    if not project_id:
-        st.warning("""
-        ⚠️ Configuração GCS faltando para desenvolvimento local:
-        
-        **Opção 1: Variáveis de ambiente**
-        ```
-        set GOOGLE_CLOUD_PROJECT=groovy-rope-471520-c9
-        set GCS_BUCKET_NAME=i2a2-eda-uploads
-        ```
-        
-        **Opção 2: Autenticação manual**
-        ```
-        gcloud auth application-default login
-        gcloud config set project groovy-rope-471520-c9
-        ```
-        """)
-        return False
-    
-    # Verificar credenciais
-    if not os.getenv('GOOGLE_APPLICATION_CREDENTIALS'):
-        # Tentar usar credenciais padrão
-        try:
-            from google.auth import default
-            credentials, _ = default()
-            st.success("✅ Credenciais Google Cloud encontradas")
-            return True
-        except Exception as e:
-            st.warning(f"⚠️ Problema com credenciais: {e}")
-            st.info("Execute: `gcloud auth application-default login`")
+        else:
+            st.error("❌ GOOGLE_CLOUD_PROJECT não configurado")
             return False
-    
-    return True
+    else:
+        st.info("🖥️ Ambiente local detectado")
+        return project_id is not None
