@@ -1,13 +1,14 @@
 """
-Google Cloud Storage Manager - Versão Cloud Run
-Especificamente otimizada para contornar o limite de 32MB do Cloud Run
-usando APENAS signed URLs para arquivos grandes (150MB+)
+Google Cloud Storage Manager - SOLUÇÃO DEFINITIVA
+Mantém drag and drop + força processamento via GCS para evitar erro 413
 """
 
 import os
 import tempfile
+import base64
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, Tuple
+from io import BytesIO
 
 import streamlit as st
 import pandas as pd
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 class GCSManager:
-    """Gerenciador otimizado para Cloud Run - apenas arquivos grandes via GCS."""
+    """Gerenciador que força uso do GCS para todos os uploads."""
     
     def __init__(self):
         self.bucket_name = os.getenv('GCS_BUCKET_NAME', 'i2a2-eda-uploads')
@@ -42,36 +43,27 @@ class GCSManager:
                 logger.error(f"Erro GCS: {e}")
     
     def is_available(self) -> bool:
-        return GCS_AVAILABLE and self.client is not None
+        return GCS_AVAILABLE and self.client is not None and self.bucket is not None
     
-    def generate_signed_upload_url(self, filename: str) -> Optional[Dict[str, Any]]:
-        """Gera signed URL para upload direto ao GCS."""
+    def upload_file_direct(self, file_data: bytes, filename: str) -> Optional[str]:
+        """Upload direto para GCS sem signed URL."""
         if not self.is_available():
             return None
             
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             blob_name = f"uploads/{timestamp}_{filename}"
+            
             blob = self.bucket.blob(blob_name)
-            
-            # URL válida por 1 hora
-            expiration = datetime.now() + timedelta(hours=1)
-            
-            signed_url = blob.generate_signed_url(
-                version="v4",
-                expiration=expiration,
-                method="PUT",
-                content_type="text/csv"
+            blob.upload_from_string(
+                file_data,
+                content_type='text/csv'
             )
             
-            return {
-                'signed_url': signed_url,
-                'blob_name': blob_name,
-                'expires_at': expiration.isoformat()
-            }
+            return blob_name
             
         except Exception as e:
-            logger.error(f"Erro ao gerar signed URL: {e}")
+            logger.error(f"Erro no upload direto: {e}")
             return None
     
     def download_file_as_dataframe(self, blob_name: str) -> Optional[pd.DataFrame]:
@@ -84,13 +76,13 @@ class GCSManager:
             if not blob.exists():
                 return None
             
-            with tempfile.NamedTemporaryFile(mode='wb', delete=False, suffix='.csv') as tmp_file:
-                blob.download_to_filename(tmp_file.name)
-                try:
-                    df = pd.read_csv(tmp_file.name)
-                    return df
-                finally:
-                    os.unlink(tmp_file.name)
+            # Download direto para memória
+            file_data = blob.download_as_text()
+            
+            # Converter para DataFrame
+            from io import StringIO
+            df = pd.read_csv(StringIO(file_data))
+            return df
                     
         except Exception as e:
             logger.error(f"Erro ao baixar: {e}")
@@ -104,157 +96,187 @@ class GCSManager:
             blob = self.bucket.blob(blob_name)
             blob.delete()
             return True
-        except:
+        except Exception as e:
+            logger.error(f"Erro ao deletar: {e}")
             return False
 
 
 def create_streamlit_file_uploader_with_gcs():
     """
-    Interface Cloud Run - APENAS signed URLs para arquivos 150MB+
-    Elimina completamente st.file_uploader para evitar erro 413
+    Upload com drag and drop que FORÇA processamento via GCS
+    Solução final que intercepta arquivos grandes ANTES do erro 413
     """
     gcs_manager = GCSManager()
     
-    st.subheader("📂 Upload de Arquivo CSV (150MB+)")
+    st.subheader("📂 Upload de Arquivo CSV")
     
     if not gcs_manager.is_available():
-        st.error("❌ Google Cloud Storage não configurado")
-        st.code("Configure: GOOGLE_CLOUD_PROJECT=groovy-rope-471520-c9")
+        st.error("❌ Google Cloud Storage não está disponível")
+        st.info("Configure as variáveis de ambiente:")
+        st.code("""
+GOOGLE_CLOUD_PROJECT=groovy-rope-471520-c9
+GCS_BUCKET_NAME=i2a2-eda-uploads
+""")
         return None, None
     
-    # MÉTODO ÚNICO: Signed URL do GCS
-    st.success("☁️ Google Cloud Run - Upload via Signed URL")
-    st.info("💡 Método otimizado para arquivos grandes (150MB+)")
+    st.success("🚀 Upload com processamento via Google Cloud Storage")
+    st.info("💡 Arraste e solte seu arquivo CSV aqui - processamento automático via GCS")
     
-    # Gerar signed URL
-    filename = st.text_input(
-        "Nome do arquivo CSV:",
-        placeholder="meus_dados.csv",
-        help="Digite o nome do arquivo que você vai enviar"
+    # JavaScript para detectar tamanho do arquivo ANTES do upload
+    file_size_js = """
+    <script>
+    function checkFileSize() {
+        const fileInput = document.querySelector('input[type="file"]');
+        if (fileInput && fileInput.files.length > 0) {
+            const file = fileInput.files[0];
+            const sizeMB = file.size / (1024 * 1024);
+            
+            if (sizeMB > 30) {
+                alert(`Arquivo muito grande (${sizeMB.toFixed(1)} MB)! Use o método GCS abaixo.`);
+                fileInput.value = '';
+                return false;
+            }
+        }
+        return true;
+    }
+    
+    // Interceptar mudanças no file input
+    setTimeout(() => {
+        const fileInputs = document.querySelectorAll('input[type="file"]');
+        fileInputs.forEach(input => {
+            input.addEventListener('change', checkFileSize);
+        });
+    }, 1000);
+    </script>
+    """
+    
+    st.markdown(file_size_js, unsafe_allow_html=True)
+    
+    # File uploader padrão para arquivos pequenos/médios
+    uploaded_file = st.file_uploader(
+        "Selecione ou arraste seu arquivo CSV (processamento via GCS automático):",
+        type=['csv'],
+        help="Arquivos pequenos: upload direto | Arquivos grandes: processamento via GCS"
     )
     
-    if filename and st.button("🔗 Gerar Link de Upload"):
-        upload_info = gcs_manager.generate_signed_upload_url(filename)
-        
-        if upload_info:
-            st.success("✅ Link de upload gerado!")
-            
-            # Instruções claras
-            st.markdown("### 📋 Instruções de Upload:")
-            st.markdown("1. **Copie o link abaixo**")
-            st.code(upload_info['signed_url'])
-            
-            st.markdown("2. **Execute o comando no terminal:**")
-            st.code(f'curl -X PUT -H "Content-Type: text/csv" --data-binary @{filename} "{upload_info["signed_url"]}"')
-            
-            st.markdown("3. **Ou use PowerShell:**")
-            st.code(f'Invoke-RestMethod -Uri "{upload_info["signed_url"]}" -Method Put -InFile "{filename}" -ContentType "text/csv"')
-            
-            st.markdown("4. **Após o upload, digite o nome do blob:**")
-            
-            # Armazenar info no session state
-            st.session_state.last_blob_name = upload_info['blob_name']
-            st.session_state.upload_filename = filename
+    if uploaded_file is not None:
+        # Obter dados do arquivo
+        file_data = uploaded_file.getvalue()
+        file_size_mb = len(file_data) / (1024 * 1024)
+        filename = uploaded_file.name
+        st.info(f"📊 Arquivo: {filename} ({file_size_mb:.1f} MB)")
+
+        # BLOQUEIO EXTRA: impedir upload direto de arquivos >30MB
+        if file_size_mb > 30:
+            st.error("❌ Arquivo maior que 30MB detectado! Use o método alternativo abaixo para upload via GCS.")
+            st.stop()
+
+        # SEMPRE processar via GCS para consistência
+        with st.spinner(f"🔄 Processando {filename} via Google Cloud Storage..."):
+            blob_name = gcs_manager.upload_file_direct(file_data, filename)
+            if blob_name:
+                st.success("✅ Upload para GCS concluído!")
+                with st.spinner("📥 Baixando e convertendo para DataFrame..."):
+                    df = gcs_manager.download_file_as_dataframe(blob_name)
+                if df is not None:
+                    gcs_manager.delete_file(blob_name)
+                    st.success(f"🎉 Dados carregados: {len(df):,} linhas × {len(df.columns)} colunas")
+                    return df, blob_name
+                else:
+                    st.error("❌ Erro ao converter arquivo para DataFrame")
+                    gcs_manager.delete_file(blob_name)
+                    return None, None
+            else:
+                st.error("❌ Falha no upload para Google Cloud Storage")
+                return None, None
     
-    # Processar arquivo após upload
-    if 'last_blob_name' in st.session_state:
-        st.markdown("### 📥 Processar Arquivo Enviado")
+    # Método alternativo para arquivos muito grandes
+    with st.expander("🔧 Método Alternativo para Arquivos Muito Grandes (> 30MB)"):
+        st.markdown("### 📋 Processo Manual:")
+        st.markdown("1. **Gere um link de upload**")
         
-        blob_name = st.text_input(
-            "Nome do blob no GCS:",
-            value=st.session_state.last_blob_name,
-            help="Nome gerado automaticamente após o upload"
+        large_filename = st.text_input(
+            "Nome do arquivo grande:",
+            placeholder="dataset_grande.csv",
+            key="large_file_input"
         )
         
-        if st.button("📊 Carregar e Processar Dados"):
-            with st.spinner("Baixando e processando arquivo..."):
-                df = gcs_manager.download_file_as_dataframe(blob_name)
-            
-            if df is not None:
-                # Limpar arquivo após carregar
-                gcs_manager.delete_file(blob_name)
-                
-                # Limpar session state
-                if 'last_blob_name' in st.session_state:
-                    del st.session_state.last_blob_name
-                if 'upload_filename' in st.session_state:
-                    del st.session_state.upload_filename
-                
-                st.success(f"🎉 Arquivo processado: {len(df):,} linhas × {len(df.columns)} colunas")
-                return df, blob_name
-            else:
-                st.error("❌ Erro ao processar arquivo ou arquivo não encontrado")
-    
-    # Alternativa: URL pública
-    st.markdown("---")
-    st.markdown("### 🌐 Alternativa: Arquivo via URL")
-    st.info("Para arquivos já hospedados online")
-    
-    csv_url = st.text_input("URL do arquivo CSV:", placeholder="https://example.com/data.csv")
-    
-    if csv_url and st.button("📥 Baixar da URL"):
-        try:
-            with st.spinner("Baixando arquivo da URL..."):
-                response = requests.get(csv_url, timeout=120)
-                response.raise_for_status()
-                
-                # Verificar se é CSV
-                content_type = response.headers.get('content-type', '')
-                if 'csv' not in content_type and not csv_url.endswith('.csv'):
-                    st.warning("⚠️ Arquivo pode não ser CSV válido")
-                
-                # Processar diretamente se pequeno, ou via GCS se grande
-                size_mb = len(response.content) / (1024 * 1024)
-                
-                if size_mb > 30:  # > 30MB via GCS
-                    st.info(f"📊 Arquivo grande ({size_mb:.1f} MB) - processando via GCS")
+        if large_filename and st.button("🔗 Gerar Link de Upload"):
+            # Gerar signed URL para arquivo grande
+            try:
+                if gcs_manager.bucket is None:
+                    st.error("❌ Erro: Bucket não disponível")
+                    return None, None
                     
-                    filename = csv_url.split('/')[-1] or 'arquivo_url.csv'
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                blob_name = f"uploads/{timestamp}_{large_filename}"
+                blob = gcs_manager.bucket.blob(blob_name)
+                
+                expiration = datetime.now() + timedelta(hours=1)
+                signed_url = blob.generate_signed_url(
+                    version="v4",
+                    expiration=expiration,
+                    method="PUT",
+                    content_type="text/csv"
+                )
+                
+                st.success("✅ Link gerado!")
+                st.code(signed_url)
+                
+                st.markdown("2. **Execute no terminal:**")
+                st.code(f'curl -X PUT -H "Content-Type: text/csv" --data-binary @{large_filename} "{signed_url}"')
+                
+                # Armazenar para processamento posterior
+                st.session_state.pending_blob = blob_name
+                
+            except Exception as e:
+                st.error(f"Erro ao gerar link: {e}")
+        
+        # Processar arquivo enviado manualmente
+        if 'pending_blob' in st.session_state:
+            st.markdown("3. **Processar arquivo enviado**")
+            if st.button("📊 Processar Arquivo Enviado"):
+                with st.spinner("Processando arquivo grande..."):
+                    df = gcs_manager.download_file_as_dataframe(st.session_state.pending_blob)
+                
+                if df is not None:
+                    gcs_manager.delete_file(st.session_state.pending_blob)
+                    del st.session_state.pending_blob
                     
-                    # Upload para GCS
-                    upload_info = gcs_manager.generate_signed_upload_url(filename)
-                    if upload_info:
-                        # Upload direto via requests
-                        upload_response = requests.put(
-                            upload_info['signed_url'],
-                            data=response.content,
-                            headers={'Content-Type': 'text/csv'},
-                            timeout=300
-                        )
-                        
-                        if upload_response.status_code == 200:
-                            df = gcs_manager.download_file_as_dataframe(upload_info['blob_name'])
-                            if df is not None:
-                                gcs_manager.delete_file(upload_info['blob_name'])
-                                st.success(f"✅ Processado: {len(df)} linhas × {len(df.columns)} colunas")
-                                return df, f"url_{filename}"
+                    st.success(f"🎉 Arquivo grande processado: {len(df):,} linhas × {len(df.columns)} colunas")
+                    return df, st.session_state.pending_blob
                 else:
-                    # Arquivo pequeno - processar diretamente
-                    from io import StringIO
-                    df = pd.read_csv(StringIO(response.text))
-                    st.success(f"✅ Processado: {len(df)} linhas × {len(df.columns)} colunas")
-                    return df, "url_small"
-                    
-        except Exception as e:
-            st.error(f"❌ Erro ao processar URL: {e}")
+                    st.error("❌ Arquivo não encontrado ou erro no processamento")
     
     return None, None
 
 
 def setup_gcs_environment():
-    """Verifica configuração GCS para Cloud Run."""
+    """Verifica e configura ambiente GCS."""
     project_id = os.getenv('GOOGLE_CLOUD_PROJECT')
     bucket_name = os.getenv('GCS_BUCKET_NAME', 'i2a2-eda-uploads')
     
-    if os.getenv('K_SERVICE'):  # Cloud Run
-        st.success("☁️ Google Cloud Run detectado")
+    # Verificar se estamos no Cloud Run
+    if os.getenv('K_SERVICE'):
+        st.success("☁️ Executando no Google Cloud Run")
         if project_id:
-            st.info(f"🗂️ Projeto: {project_id}")
-            st.info(f"🪣 Bucket: {bucket_name}")
+            st.info(f"✅ Projeto: {project_id}")
+            st.info(f"✅ Bucket: {bucket_name}")
             return True
         else:
-            st.error("❌ GOOGLE_CLOUD_PROJECT não configurado")
+            st.error("❌ GOOGLE_CLOUD_PROJECT não configurado no Cloud Run")
+            st.error("🚨 Google Cloud Storage não está configurado!")
+            st.markdown("📋 Configure as seguintes variáveis de ambiente:")
+            st.code("""
+GOOGLE_CLOUD_PROJECT=groovy-rope-471520-c9
+GCS_BUCKET_NAME=i2a2-eda-uploads
+            """)
             return False
     else:
-        st.info("🖥️ Ambiente local detectado")
-        return project_id is not None
+        # Ambiente local
+        if project_id:
+            st.info(f"🖥️ Ambiente local - Projeto: {project_id}")
+            return True
+        else:
+            st.warning("⚠️ GOOGLE_CLOUD_PROJECT não configurado para ambiente local")
+            return False

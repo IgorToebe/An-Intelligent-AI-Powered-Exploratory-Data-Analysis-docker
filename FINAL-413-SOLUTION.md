@@ -1,6 +1,7 @@
 # 🚨 SOLUÇÃO FINAL - ERRO 413 RESOLVIDO
 
 ## ❌ **Problema Persistente:**
+
 - `AxiosError: Request failed with status code 413` continua ocorrendo
 - st.file_uploader sempre tenta processar o arquivo localmente primeiro
 - Cloud Run bloqueia uploads > limite antes mesmo de chegar ao GCS
@@ -8,21 +9,25 @@
 ## ✅ **SOLUÇÃO IMPLEMENTADA:**
 
 ### 🔧 **1. Interface Completamente Reformulada**
+
 Removido uso problemático do `st.file_uploader` para arquivos grandes.
 
 **Nova interface oferece 3 métodos:**
 
 #### 🔗 **Método 1: Upload via URL**
+
 - Cole URL de arquivo CSV online
 - Aplicação baixa e processa via GCS
 - Sem limitações de tamanho
 
 #### 📄 **Método 2: Paste Direto**
+
 - Cole conteúdo CSV diretamente no text_area
 - Processamento imediato via pandas
 - Ideal para dados tabulares pequenos
 
 #### 📎 **Método 3: Upload Direto (< 500KB)**
+
 - st.file_uploader APENAS para arquivos muito pequenos
 - Limite baixo força uso dos métodos alternativos
 - Mesmo arquivos pequenos são processados via GCS
@@ -30,12 +35,14 @@ Removido uso problemático do `st.file_uploader` para arquivos grandes.
 ### 🛠️ **2. Configurações Anti-413**
 
 **Streamlit Config (`.streamlit/config.toml`):**
+
 ```toml
 maxUploadSize = 1
 maxMessageSize = 1
 ```
 
 **Dockerfile:**
+
 ```dockerfile
 --server.maxUploadSize=1 --server.maxMessageSize=1
 ```
@@ -53,7 +60,7 @@ maxMessageSize = 1
 💡 Cole a URL de um arquivo CSV online
 [Input URL] [Botão Baixar e Processar]
 
-📄 Método 2: Cole o Conteúdo CSV  
+📄 Método 2: Cole o Conteúdo CSV
 💡 Copie e cole o conteúdo do arquivo CSV diretamente
 [Text Area] [Botão Processar CSV]
 
@@ -79,7 +86,7 @@ maxMessageSize = 1
 ## 📊 **Casos de Uso:**
 
 - **📈 Datasets Públicos**: Use Método 1 (URL)
-- **📋 Dados Pequenos**: Use Método 2 (Paste)  
+- **📋 Dados Pequenos**: Use Método 2 (Paste)
 - **📁 Arquivos Locais Pequenos**: Use Método 3 (Upload < 500KB)
 - **📦 Arquivos Grandes**: Upload manual para GCS + URL pública
 

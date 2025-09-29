@@ -1,11 +1,13 @@
 # 🚀 SOLUÇÃO CLOUD RUN - ARQUIVOS 150MB+
 
 ## 🎯 **Objetivo**
+
 Upload de arquivos CSV de **150MB+** no Google Cloud Run, contornando o limite de **32MB**.
 
 ## ⚡ **Método: Signed URLs do Google Cloud Storage**
 
 ### 🔧 **Como Funciona:**
+
 1. **Usuário solicita link**: Digite nome do arquivo → Gerar Link
 2. **Upload direto ao GCS**: Use curl/PowerShell para enviar arquivo
 3. **Processamento automático**: Aplicação baixa do GCS e processa
@@ -14,6 +16,7 @@ Upload de arquivos CSV de **150MB+** no Google Cloud Run, contornando o limite d
 ## 📋 **Interface de Uso**
 
 ### **Passo 1: Gerar Link de Upload**
+
 ```
 📂 Upload de Arquivo CSV (150MB+)
 ☁️ Google Cloud Run - Upload via Signed URL
@@ -23,6 +26,7 @@ Nome do arquivo CSV: [meus_dados.csv]
 ```
 
 ### **Passo 2: Upload via Terminal**
+
 ```bash
 # Linux/Mac
 curl -X PUT -H "Content-Type: text/csv" --data-binary @meus_dados.csv "SIGNED_URL"
@@ -32,6 +36,7 @@ Invoke-RestMethod -Uri "SIGNED_URL" -Method Put -InFile "meus_dados.csv" -Conten
 ```
 
 ### **Passo 3: Processar Dados**
+
 ```
 📥 Processar Arquivo Enviado
 Nome do blob no GCS: [uploads/20250929_143022_meus_dados.csv]
@@ -53,11 +58,13 @@ graph LR
 ## 🛠️ **Configurações Técnicas**
 
 ### **Limites Removidos:**
+
 - ❌ st.file_uploader (causa erro 413)
 - ❌ Upload direto via Streamlit
 - ❌ Processamento local de arquivos grandes
 
 ### **Configurações aplicadas:**
+
 ```toml
 # .streamlit/config.toml
 maxUploadSize = 1
@@ -72,15 +79,18 @@ maxMessageSize = 1
 ## 📊 **Suporte a Diferentes Cenários**
 
 ### **Arquivos Grandes (150MB+)**
+
 - ✅ **Signed URLs**: Método principal
 - ✅ **URLs públicas**: Para arquivos já online
 - ✅ **Timeout estendido**: 2 minutos para download
 
 ### **Arquivos Médios (30-150MB)**
+
 - ✅ **Via URL**: Processamento automático via GCS
 - ✅ **Detecção inteligente**: Auto-roteamento para GCS
 
 ### **URLs Públicas**
+
 - ✅ **Qualquer tamanho**: Suporte completo
 - ✅ **Validação**: Verificação de tipo CSV
 - ✅ **Fallback**: Processamento direto se < 30MB
@@ -114,4 +124,5 @@ curl -X PUT -H "Content-Type: text/csv" \
 ```
 
 ## 🎯 **Status Final**
+
 **🟢 OTIMIZADO PARA CLOUD RUN** - Suporte nativo a arquivos 150MB+ sem limitações!

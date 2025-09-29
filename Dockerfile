@@ -36,5 +36,5 @@ EXPOSE $PORT
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:$PORT/_stcore/health || exit 1
 
-# Run the application with very low upload limits to force GCS usage
-CMD ["sh", "-c", "streamlit run app.py --server.port=$PORT --server.address=0.0.0.0 --server.headless=true --browser.serverAddress=0.0.0.0 --browser.serverPort=$PORT --server.maxUploadSize=1 --server.maxMessageSize=1 --server.enableCORS=false"]
+# Run the application with proper upload limits for interceptation
+CMD ["sh", "-c", "streamlit run app.py --server.port=$PORT --server.address=0.0.0.0 --server.headless=true --browser.serverAddress=0.0.0.0 --browser.serverPort=$PORT --server.maxUploadSize=200 --server.maxMessageSize=200 --server.enableCORS=false"]

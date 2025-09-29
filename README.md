@@ -27,6 +27,7 @@ Uma aplicação web avançada para análise exploratória de dados usando inteli
 ## 🚀 Deploy no Streamlit Cloud
 
 ### ☁️ Acesso Direto
+
 **🌐 App Online**: [Link da aplicação no Streamlit Cloud]
 
 ### 🛠️ Deploy Próprio
@@ -36,18 +37,20 @@ Uma aplicação web avançada para análise exploratória de dados usando inteli
 2. **Acesse [Streamlit Cloud](https://share.streamlit.io/)**
 
 3. **Crie um novo app**:
-   - Repository: seu-usuario/seu-repositorio  
+
+   - Repository: seu-usuario/seu-repositorio
    - Branch: main
    - Main file: app.py
 
 4. **Configure os Secrets** (Settings → Secrets):
+
    ```toml
    GOOGLE_API_KEY = "sua_google_gemini_api_key_aqui"
    ```
-   
+
    Obtenha sua API key gratuita em: https://makersuite.google.com/app/apikey
 
-5. **Deploy automático** - Pronto! 
+5. **Deploy automático** - Pronto!
 
 ### 🖥️ Execução Local (Opcional)
 
@@ -66,16 +69,19 @@ streamlit run app.py
 
 1. **Gerar Link**: Na aplicação, digite o nome do arquivo e clique em "Gerar Link"
 2. **Upload via Terminal**:
+
    ```bash
    # Linux/Mac
    curl -X PUT -H "Content-Type: text/csv" --data-binary @arquivo.csv "SIGNED_URL"
-   
-   # Windows PowerShell  
+
+   # Windows PowerShell
    Invoke-RestMethod -Uri "SIGNED_URL" -Method Put -InFile "arquivo.csv" -ContentType "text/csv"
    ```
+
 3. **Processar**: Na aplicação, cole o nome do blob e clique em "Processar"
 
 ### 🌐 **Método URL Pública**
+
 - Cole a URL de um arquivo CSV online
 - Suporte automático para arquivos de qualquer tamanho
 
