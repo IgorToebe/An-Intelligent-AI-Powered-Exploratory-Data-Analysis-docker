@@ -737,7 +737,8 @@ def inicializar_sessao():
         'agente': None,
         'historico_chat': [],
         'arquivo_nome': None,
-        'api_key': api_key_default
+        'api_key': api_key_default,
+        'llm_model': 'gemini-2.5-flash'  # Modelo LLM padrão
     }
     
     for key, default_value in session_defaults.items():
@@ -894,7 +895,11 @@ def _processar_dataframe_carregado(df: pd.DataFrame, blob_name: Optional[str] = 
             with st.spinner("🤖 Inicializando agente de IA..."):
                 AgenteEDA = get_agente_class()
                 if AgenteEDA:
-                    st.session_state.agente = AgenteEDA(df, api_key=st.session_state.api_key)
+                    st.session_state.agente = AgenteEDA(
+                        df,
+                        api_key=st.session_state.api_key,
+                        llm_model=st.session_state.get('llm_model', None)
+                    )
                     st.session_state.analise_iniciada = True
                     st.rerun()
         
@@ -1412,8 +1417,8 @@ def sidebar_informacoes():
                     # Verificar se o agente está usando LLM
                     if hasattr(st.session_state.agente, 'llm_disponivel') and st.session_state.agente.llm_disponivel:
                         st.markdown("""
-                        <div style="background: var(--background-elevated); border: 1px solid var(--success-color); padding: 0.5rem; border-radius: 4px; color: var(--success-color);">
-                            <small><strong>Intelligence Agent Online</strong></small>
+                        <div style="background: var(--background-elevated); border: 1px solid var(--success-color); padding: 0.5rem; border-radius: 4px;">
+                            <small style="color: var(--success-color);"><strong>Intelligence Agent Online</strong></small>
                         </div>
                         """, unsafe_allow_html=True)
                     st.rerun()
@@ -1511,6 +1516,21 @@ def sidebar_informacoes():
             - "Estatísticas descritivas detalhadas"
             - "Detecção automática de padrões anômalos"
             """, help="Comandos em linguagem natural para análise exploratória avançada")
+
+
+# ========== SELEÇÃO DE MODELO LLM ========== 
+llm_model = st.sidebar.selectbox(
+    'Selecione o modelo de IA (LLM) para análise:',
+    [
+        'gemini-2.5-flash',
+        'gemini-1.5-pro',
+        'openai-gpt-4',
+        'openai-gpt-3.5-turbo'
+    ],
+    index=0,
+    help='Escolha o modelo de linguagem para as respostas do agente.'
+)
+st.session_state['llm_model'] = llm_model
 
 
 def main():

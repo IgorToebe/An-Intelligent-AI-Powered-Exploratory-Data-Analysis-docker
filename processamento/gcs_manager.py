@@ -239,11 +239,11 @@ async function uploadToGCS() {{
 <button onclick="uploadToGCS()">⬆️ Enviar arquivo grande para GCS</button>
 <script>
 // Polling para detectar atributo de upload concluído
-setInterval(function() {
-    if (window.parent.document.body.getAttribute('data-gcs-upload') === 'done') {
-        window.parent.postMessage({type: 'gcs_upload_streamlit'}, '*');
-    }
-}, 1000);
+setInterval(function() {{
+    if (window.parent.document.body.getAttribute('data-gcs-upload') === 'done') {{
+        window.parent.postMessage({{type: 'gcs_upload_streamlit'}}, '*');
+    }}
+}}, 1000);
 </script>
 '''
             st.markdown(upload_js, unsafe_allow_html=True)

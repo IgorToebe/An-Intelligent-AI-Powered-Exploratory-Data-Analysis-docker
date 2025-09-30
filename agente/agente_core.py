@@ -47,16 +47,18 @@ class AgenteEDA:
     Utiliza LangChain para interpretar perguntas e executar análises.
     """
     
-    def __init__(self, dataframe: pd.DataFrame, api_key: Optional[str] = None):
+    def __init__(self, dataframe: pd.DataFrame, api_key: Optional[str] = None, llm_model: Optional[str] = None):
         """
         Inicializa o agente EDA.
         
         Args:
             dataframe: DataFrame para análise
             api_key: Chave da API Google Gemini (opcional, pode vir do ambiente)
+            llm_model: Nome do modelo LLM a ser utilizado (opcional)
         """
         self.df = dataframe
         self.memoria = MemoriaConversa()
+        self.llm_model = llm_model
         
         # Configurar API key do Google Gemini
         # Sempre atualiza a variável de ambiente se uma nova API key é fornecida
@@ -86,13 +88,12 @@ class AgenteEDA:
         self._inicializar_agente_langchain()
     
     def _inicializar_agente_langchain(self):
-        """Inicializa o agente usando LangChain com Google Gemini."""
+        """Inicializa o agente usando LangChain com Google Gemini ou outro modelo."""
         try:
-            # Configurar Google Gemini usando gerenciador de configurações
             api_key_str = get_api_key()
-            model_name = get_config('GEMINI_MODEL', 'gemini-2.5-flash')
+            # Prioriza modelo passado pelo construtor
+            model_name = self.llm_model or get_config('GEMINI_MODEL', 'gemini-2.5-flash')
             temperature = float(get_config('GEMINI_TEMPERATURE', '0.1'))
-            
             self.llm = ChatGoogleGenerativeAI(
                 model=model_name,
                 temperature=temperature,
