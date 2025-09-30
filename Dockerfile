@@ -25,9 +25,14 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 # Copy application code
 COPY . .
+COPY chave.json /app/chave.json
+ENV GOOGLE_APPLICATION_CREDENTIALS=/app/chave.json
 
 # Create temp directories
 RUN mkdir -p temp_graficos/arquivados
+
+# Remove arquivos desnecessários do container
+RUN rm -rf /app/__pycache__ /app/temp_graficos /app/Programa.rar /app/README.md /app/LICENSE
 
 # Expose port
 EXPOSE $PORT

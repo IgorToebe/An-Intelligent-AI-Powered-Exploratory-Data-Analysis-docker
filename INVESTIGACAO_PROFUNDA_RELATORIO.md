@@ -1,16 +1,20 @@
 # 🔍 INVESTIGAÇÃO PROFUNDA - RELATÓRIO TÉCNICO
+
 ## Análise e Correção do Sistema de Upload para Google Cloud Run
 
 ### 📋 **PROBLEMA IDENTIFICADO**
+
 O sistema estava apresentando erro **AxiosError 413 (Payload Too Large)** e interface quebrada com:
+
 - ❌ Drag and drop removido
-- ❌ "Gerar link de upload" não funcionando  
+- ❌ "Gerar link de upload" não funcionando
 - ❌ Falhas no processamento de arquivos grandes (>30MB)
 - ❌ Configurações inadequadas para Cloud Run
 
 ### 🔎 **ANÁLISE DETALHADA**
 
 #### **1. Root Cause Analysis**
+
 ```
 CAUSA RAIZ: maxUploadSize=1MB estava bloqueando TODOS os uploads
 ↓
@@ -22,6 +26,7 @@ Resultado: Error 413 + Interface quebrada
 ```
 
 #### **2. Configurações Problemáticas Encontradas**
+
 ```toml
 # .streamlit/config.toml - ANTES (PROBLEMÁTICO)
 [server]
@@ -35,6 +40,7 @@ maxMessageSize = 200  # ✅ Adequado para GCS
 ```
 
 #### **3. Arquitetura da Solução Implementada**
+
 ```
 Fluxo de Upload Otimizado:
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
@@ -52,18 +58,20 @@ Fluxo de Upload Otimizado:
 ### ⚡ **SOLUÇÕES IMPLEMENTADAS**
 
 #### **1. GCS Manager Inteligente**
+
 ```python
 # processamento/gcs_manager.py - SOLUÇÃO DEFINITIVA
 def create_streamlit_file_uploader_with_gcs():
     """
     ✅ Mantém drag and drop
-    ✅ Força processamento via GCS para consistência  
+    ✅ Força processamento via GCS para consistência
     ✅ JavaScript para detecção preventiva de arquivos grandes
     ✅ Fallback para arquivos muito grandes com signed URLs
     """
 ```
 
 **Características:**
+
 - **Drag & Drop**: Mantido e funcional
 - **Auto-detecção**: JavaScript intercepta arquivos >30MB
 - **Processamento Unificado**: TODOS os arquivos via GCS
@@ -71,6 +79,7 @@ def create_streamlit_file_uploader_with_gcs():
 - **Fallback**: Signed URLs para casos extremos
 
 #### **2. Configuração Otimizada**
+
 ```dockerfile
 # Dockerfile - Limites atualizados
 CMD streamlit run app.py \
@@ -81,22 +90,24 @@ CMD streamlit run app.py \
 ```
 
 #### **3. Detecção Preventiva JavaScript**
+
 ```javascript
 // Intercepta arquivos grandes ANTES do erro 413
 function checkFileSize() {
-    const file = fileInput.files[0];
-    const sizeMB = file.size / (1024 * 1024);
-    
-    if (sizeMB > 30) {
-        alert(`Arquivo muito grande (${sizeMB.toFixed(1)} MB)!`);
-        // Redireciona para método GCS
-    }
+  const file = fileInput.files[0];
+  const sizeMB = file.size / (1024 * 1024);
+
+  if (sizeMB > 30) {
+    alert(`Arquivo muito grande (${sizeMB.toFixed(1)} MB)!`);
+    // Redireciona para método GCS
+  }
 }
 ```
 
 ### 📊 **RESULTADOS ALCANÇADOS**
 
 #### **✅ Problemas Resolvidos:**
+
 1. **Drag & Drop**: ✅ Restaurado e funcional
 2. **Error 413**: ✅ Eliminado via GCS processing
 3. **Arquivos Grandes**: ✅ Suporte até 150MB+ via GCS
@@ -104,6 +115,7 @@ function checkFileSize() {
 5. **Performance**: ✅ Upload direto para GCS (mais rápido)
 
 #### **📈 Melhorias Implementadas:**
+
 - **Consistência**: Todos os arquivos processados via GCS
 - **Segurança**: Cleanup automático de arquivos temporários
 - **UX**: Feedback visual em tempo real
@@ -130,12 +142,14 @@ gcloud run deploy ai-powered-exploratory-data-analysis \
 ### 🎯 **VALIDAÇÃO DA SOLUÇÃO**
 
 #### **Cenários Testados:**
+
 1. **Arquivos pequenos (<10MB)**: ✅ Upload via drag & drop
-2. **Arquivos médios (10-30MB)**: ✅ Processamento automático via GCS  
+2. **Arquivos médios (10-30MB)**: ✅ Processamento automático via GCS
 3. **Arquivos grandes (>30MB)**: ✅ Detecção JavaScript + GCS
 4. **Arquivos muito grandes (>100MB)**: ✅ Signed URLs funcionais
 
 #### **Métricas de Performance:**
+
 - **Tempo de Build**: 3.5s
 - **Tempo de Deploy**: <2min
 - **Memory Usage**: 2Gi (otimizado)

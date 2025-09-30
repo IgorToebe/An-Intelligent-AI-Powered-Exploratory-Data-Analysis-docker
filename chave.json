@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "groovy-rope-471520-c9",
+  "private_key_id": "9b9ff7e5d7bb5418aa38b11cf3e0778b33cdaf46",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCuM9pSGtPZSsrK\nMfWoryoamWoHVsUUmAzmu5bAb06WeCeYoZRuOZHJEtcQJEiHRDMmlhdne67y+j2l\nLvMMtC8CmGmMM2Gyn84+TvxWiywrDWl+K0gfAlCVMN0d1jazz+icYd+/x0CV7dUh\nRwNef7RI1mUMGA6huuBM9efy6fenMKSF3pOCIahz8Gt4MXgyXj5eEYJo78mh7y3K\ntNtw9Pb27RtSV1CobKQOjft9PMjecEgODZpy3bWofTBFX6L8pxJYzdnRblCmzYv3\nBuc3zJmrS0MuOOKmFNtqz4Z/Gcm0ke2xd0sUlUuh8hfPUA7ISXD23qB6Ixx/SVrl\nHsgDsnMFAgMBAAECggEAMTYwzNULV+1LEIfAkGC7kjwYue4HSuQRcPU5hy9qkhNr\njDDJT8IvrxAFdWfqnVvk31ezUOad68JJu+phewtD5IXN+29ggCepCe0iWAiE97yY\nOq5bd3cd8KeXL6CeX3myissTfIf7dN91QCthhkapVZJLhXkeWQ4D43nshrEV50Lc\ndSRwkWAZIA4rPNAI7rrjVyyVS47ovxJIx065KtjmlJV1afTICD8Um9CXlZF2lJeT\nf9ODJJkLEtHYhMrvcnpLd6Vcb7VM+whuexuVrJYtg1V/JKfETyQQUuwArkKYsZJt\nn7NQjOmNkfcNiUlQxYJVt0ob4Is3G5ROL73XLwPwmQKBgQDtZ0zPa/icY2VPpQCG\nBd7Hw/MoECS7yNJmNV045nx8k/f86OvDDom/bg7tngThWkm5YE0XefvEvxDcVGTw\nitGBu7nAoSP3pLGYHqqpebdlvWtCUwdMvgBJHPAFpRKd9FCl+XdxO1rripNW72Hy\n64wplDgyiMqr5aeaujx0541ThwKBgQC72SvVpl7iTcfgPjmiEzlUcpLF3dZcVSE0\n2lkJ65fYskVRTfviJ7ZNQpeCYRISE3umVPBJHe/3cLKNbT1Xd/onI6KTE3M9Ujut\n4pBjIR3UapyTEJUaB0UOw7urE6ul7WZSK6N7C4DAAS6yRLE2WBeG6dtKCbG21QrX\niP4pAfDAEwKBgGgtd4hiMhO2jmO33ZXyh4OUGmUPSH9bLfEKI+FvS1uDt0Q1lhff\njlUB3+0n9a5KZ6XAe7P8pJ3+1lBJfI4N7MgIcAf27oiirgg6FNwP/InZ6HKPatmj\nWw66cx2XBado6ecbpO18hXZtNiDlJU9rS/OHBm4ulvl96uG8LgGDBwKLAoGAdlW/\nxG5zFXLUOBJa8hvUILuwdE9kS3QhYA8wygwM8yiSfD55L6W+tPr/QNXvsU1utoCJ\ngjYGxkTLZkZrvx9IicFsF+TH0thr2gWA2cGx7e9fRVHL68KqoTtyjLnuhq9/psHw\n0YGUkN/tz8VwMYDbCVVmnERxHHEmzFJzcdfUFtsCgYEA36gQdpKLQ63JU4Wd4wDH\nWCj3QuTctLHHJKCVQW/PD5O8YKbCnfpcgyUXZDfPgZT8UBUkm1WyFu+g2O4hwtUn\nF1sWbajrK5jghw7knNaREjuj4p7IsKIITuRPE1T9IWl4u04CtK0CkrbPTTbAW/yC\n/cHqGJtu8CKwNNX4qHD2jWQ=\n-----END PRIVATE KEY-----\n",
+  "client_email": "groovy-rope-471520-c9@appspot.gserviceaccount.com",
+  "client_id": "104932571594227344352",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/groovy-rope-471520-c9%40appspot.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
